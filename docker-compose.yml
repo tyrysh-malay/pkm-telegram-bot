@@ -1,0 +1,13 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        INSTALL_DEV: "true"
+    ports:
+      - "8000:8000"
+    environment:
+      APP_NAME: "PKM Telegram Bot"
+      ENVIRONMENT: "development"
+    volumes:
+      - ./knowledge-base:/app/knowledge-base
