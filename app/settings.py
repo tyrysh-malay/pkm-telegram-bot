@@ -6,6 +6,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     app_name: str = "PKM Telegram Bot"
     environment: str = "development"
+    telegram_bot_enabled: bool = False
     telegram_bot_token: str | None = None
     openai_api_key: str | None = None
     database_url: str | None = None
