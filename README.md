@@ -2,7 +2,7 @@
 
 A small Python backend for turning Telegram inputs into Git-backed Markdown knowledge artifacts.
 
-Task 000 bootstraps only the runnable foundation: a FastAPI app, settings, Docker Compose, and tests.
+The current foundation includes a FastAPI app, PostgreSQL persistence, Alembic migrations, Docker Compose, and tests.
 
 ## Requirements
 
@@ -46,21 +46,41 @@ python3 -m pytest
 Start the app with Compose:
 
 ```bash
-docker compose up --build
+docker compose up -d --build
 ```
 
 The app listens on `http://localhost:8000`.
 
+PostgreSQL is started by Compose with safe development defaults. The app waits for the database health check before starting.
+
+Apply database migrations:
+
+```bash
+docker compose exec app alembic upgrade head
+```
+
+Run tests inside the development container:
+
+```bash
+docker compose exec app python -m pytest
+```
+
+Check the database readiness endpoint:
+
+```bash
+curl http://localhost:8000/ready
+```
+
 ## Environment variables
 
-The current bootstrap app only uses:
+The app uses:
 
 * `APP_NAME`
 * `ENVIRONMENT`
+* `DATABASE_URL`
 
 The following variables are documented for later milestones and can remain empty for now:
 
 * `TELEGRAM_BOT_TOKEN`
 * `OPENAI_API_KEY`
-* `DATABASE_URL`
 * `REDIS_URL`

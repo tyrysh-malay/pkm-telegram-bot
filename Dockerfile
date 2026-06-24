@@ -6,6 +6,8 @@ ARG INSTALL_DEV=false
 
 COPY pyproject.toml README.md ./
 COPY app ./app
+COPY alembic ./alembic
+COPY alembic.ini ./
 COPY tests ./tests
 
 RUN if [ "$INSTALL_DEV" = "true" ]; then \
