@@ -71,6 +71,26 @@ Check the database readiness endpoint:
 curl http://localhost:8000/ready
 ```
 
+## Telegram polling
+
+Telegram polling is disabled by default so local development and automated tests do not need a bot token.
+
+To run the bot locally, create a real token with BotFather and set these values in your local `.env`:
+
+```text
+TELEGRAM_BOT_ENABLED=true
+TELEGRAM_BOT_TOKEN=<local secret>
+```
+
+Then recreate the app container:
+
+```bash
+docker compose up -d --build --force-recreate app
+docker compose logs -f app
+```
+
+Polling mode expects exactly one app process. Do not run multiple Uvicorn workers while polling is enabled.
+
 ## Environment variables
 
 The app uses:
@@ -78,9 +98,10 @@ The app uses:
 * `APP_NAME`
 * `ENVIRONMENT`
 * `DATABASE_URL`
+* `TELEGRAM_BOT_ENABLED`
+* `TELEGRAM_BOT_TOKEN`
 
 The following variables are documented for later milestones and can remain empty for now:
 
-* `TELEGRAM_BOT_TOKEN`
 * `OPENAI_API_KEY`
 * `REDIS_URL`

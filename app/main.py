@@ -1,8 +1,11 @@
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi import HTTPException
 
+from app.bot.runtime import TelegramPollingRuntime
 from app.db.session import check_database_ready
 from app.settings import get_settings
 
@@ -10,7 +13,20 @@ from app.settings import get_settings
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-app = FastAPI(title=settings.app_name)
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    telegram_runtime = TelegramPollingRuntime.from_settings(settings)
+    app.state.telegram_runtime = telegram_runtime
+
+    await telegram_runtime.start()
+    try:
+        yield
+    finally:
+        await telegram_runtime.stop()
+
+
+app = FastAPI(title=settings.app_name, lifespan=lifespan)
 
 
 @app.get("/health")
