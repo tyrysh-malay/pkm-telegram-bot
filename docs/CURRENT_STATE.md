@@ -260,3 +260,18 @@ The issue was postponed to avoid mixing a new identity correction with unfinishe
 8. Create and push a clean commit boundary.
 
 9. Start a separate Telegram identity/test-isolation follow-up only after the current boundary is clean.
+
+
+## Active task
+
+Task 003 isolates automated database tests from development data.
+
+Confirmed bug:
+
+- the development database contained live Telegram messages;
+- after `docker compose exec app python -m pytest`, the development
+  `messages` count dropped to zero;
+- the exact destructive fixture still requires repository inspection.
+
+Until Task 003 is complete, do not run pytest against a development database
+containing data that must be preserved.
