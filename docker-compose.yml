@@ -13,6 +13,7 @@ services:
       APP_NAME: "PKM Telegram Bot"
       ENVIRONMENT: "development"
       DATABASE_URL: "${DATABASE_URL:-postgresql+asyncpg://pkm:pkm@postgres:5432/pkm}"
+      TEST_DATABASE_URL: "${TEST_DATABASE_URL:-postgresql+asyncpg://pkm:pkm@postgres:5432/pkm_test}"
       TELEGRAM_BOT_ENABLED: "${TELEGRAM_BOT_ENABLED:-false}"
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
     volumes:
