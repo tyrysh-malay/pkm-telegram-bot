@@ -700,6 +700,69 @@ Mixing a new identity redesign into unfinished persistence and ingestion work wo
 
 ---
 
+## D-022 — Isolate pytest from the development PostgreSQL database
+
+**Decision**
+
+Use separate PostgreSQL databases for development runtime data and automated
+test data.
+
+The development application uses `DATABASE_URL`, currently pointing at:
+
+```text
+pkm
+```
+
+Pytest uses `TEST_DATABASE_URL`, currently pointing at:
+
+```text
+pkm_test
+```
+
+The pytest bootstrap must fail closed when:
+
+* `TEST_DATABASE_URL` is missing;
+* `TEST_DATABASE_URL` targets the same database name as `DATABASE_URL`.
+
+Pytest creates the test database if needed, initializes it with committed
+Alembic migrations, and performs test cleanup only inside the test database.
+
+Docker remains the authoritative test environment.
+
+**Context or problem**
+
+The development database contained live Telegram messages. Running the test
+suite previously deleted rows from the same development `messages` table because
+pytest used the normal application database URL and its cleanup fixture deleted
+`messages` and `users`.
+
+**Reasoning**
+
+Application code opens its own sessions and commits transactions during tests,
+so rollback-only test isolation is too easy to bypass. A separate test database
+keeps fixture cleanup simple while protecting live development data.
+
+Alembic-driven initialization verifies that a clean database can be built from
+committed migrations rather than relying on runtime `create_all()`.
+
+**Consequences**
+
+* Development rows are not deleted, modified, or populated by pytest cleanup.
+* Test fixture rows such as `duplicate_user`, `new_username`, `original_user`,
+  and `pkm_user` remain confined to `pkm_test`.
+* Local host-side pytest needs database URLs that are reachable from the host,
+  for example `localhost` instead of the Compose-only `postgres` hostname.
+* A database user running tests must be able to create the configured test
+  database when it does not exist.
+* Normal application runtime and normal Alembic commands continue to use
+  `DATABASE_URL`.
+
+**Status:** accepted
+
+**Related task:** Task 003
+
+---
+
 # Possible future ADR split
 
 If this file becomes too large, the following decisions are good candidates for individual ADR files:

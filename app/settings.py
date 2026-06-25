@@ -10,6 +10,7 @@ class Settings(BaseSettings):
     telegram_bot_token: str | None = None
     openai_api_key: str | None = None
     database_url: str | None = None
+    test_database_url: str | None = None
     redis_url: str | None = None
 
     model_config = SettingsConfigDict(

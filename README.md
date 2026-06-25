@@ -38,8 +38,14 @@ curl http://localhost:8000/health
 Run tests:
 
 ```bash
+DATABASE_URL=postgresql+asyncpg://pkm:pkm@localhost:5432/pkm \
+TEST_DATABASE_URL=postgresql+asyncpg://pkm:pkm@localhost:5432/pkm_test \
 python3 -m pytest
 ```
+
+Pytest requires `TEST_DATABASE_URL` and refuses to run against the same
+database named by `DATABASE_URL`. Host-side pytest uses `localhost` because the
+Docker-only hostname `postgres` is available only inside the Compose network.
 
 ## Docker Compose
 
@@ -64,6 +70,10 @@ Run tests inside the development container:
 ```bash
 docker compose exec app python -m pytest
 ```
+
+The Compose development container sets `TEST_DATABASE_URL` to a separate
+`pkm_test` database. Pytest creates that database if needed and initializes its
+schema with Alembic migrations.
 
 Check the database readiness endpoint:
 
@@ -98,6 +108,7 @@ The app uses:
 * `APP_NAME`
 * `ENVIRONMENT`
 * `DATABASE_URL`
+* `TEST_DATABASE_URL`
 * `TELEGRAM_BOT_ENABLED`
 * `TELEGRAM_BOT_TOKEN`
 
