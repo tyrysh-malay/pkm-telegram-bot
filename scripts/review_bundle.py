@@ -36,6 +36,7 @@ API_KEY_TERM_PATTERN = re.compile(
     r"(?:^|[.\-\s_])api_key(?:$|[.\-\s_])",
     re.IGNORECASE,
 )
+TRACKED_ENV_TEMPLATE_PATH = ".env.example"
 
 DIFF_ARGUMENTS = (
     "diff",
@@ -195,6 +196,29 @@ def require_safe_path(path: str, label: str = "evidence path") -> None:
     validate_path_text(path, label)
     if is_secret_like_path(path):
         raise ReviewBundleError(f"{label} is secret-like and cannot be bundled: {path}")
+
+
+def require_safe_changed_path(
+    repository: Path,
+    path: str,
+    records: Sequence[StatusRecord],
+) -> None:
+    """Validate a changed path, with one tracked-template-only exception."""
+    validate_path_text(path, "evidence path")
+    if not is_secret_like_path(path):
+        return
+
+    is_tracked = any(not record.is_untracked for record in records)
+    is_untracked = any(record.is_untracked for record in records)
+    if path == TRACKED_ENV_TEMPLATE_PATH and is_tracked and not is_untracked:
+        head_entry = tree_entry(repository, "HEAD", path)
+        if head_entry is not None:
+            require_regular_git_blob(head_entry, f"HEAD blob {path}")
+            return
+
+    raise ReviewBundleError(
+        f"evidence path is secret-like and cannot be bundled: {path}"
+    )
 
 
 def discover_repository(start: Path) -> Path:
@@ -567,8 +591,8 @@ def collect_changed_files(
     for record in snapshot.status_records:
         records_by_path.setdefault(record.path, []).append(record)
 
-    for path in records_by_path:
-        require_safe_path(path)
+    for path, records in records_by_path.items():
+        require_safe_changed_path(repository, path, records)
     reject_untracked_special_files(repository, snapshot.untracked_paths)
     tracked_paths = tuple(
         sorted(

@@ -113,6 +113,9 @@ passed 10 tests, and the complete authoritative suite passed 69 tests.
 
 Host-to-published-port checks succeeded for both `/health` and `/ready`.
 
+The general `.env.*` rejection remains in force for untracked paths, reports,
+nested templates, and every other filename.
+
 ## Known limitations
 
 * Only text input is implemented.

@@ -1559,3 +1559,33 @@ Completed on 2026-07-02 without creating an implementation commit.
   `/health` and `/ready` checks.
 * Kept application, database, migration, Telegram, worker, environment, and
   Dockerfile behavior unchanged.
+
+## Amendment — tracked root environment template
+
+Accepted on 2026-07-02 to resolve a conflict discovered while packaging Task
+006. The repository establishes `.env.example` as its committed public
+configuration template, and Task 006 requires updating it. The original broad
+`.env.*` rejection therefore prevented a complete bundle of otherwise required
+tracked evidence.
+
+The bundler may capture the exact path `.env.example` only when it exists at
+HEAD as a regular tracked Git blob and participates as tracked changed evidence.
+It must not be ignored, and all ordinary tracked-evidence checks for Git type,
+working-tree type, UTF-8, NUL bytes, private-key content, binary diff, size,
+hashes, consistency, and repository mutation remain mandatory.
+
+This is not a global secret-path allowlist. Root `.env`, every other root
+`.env.*` name, nested `.env.example`, an untracked or newly staged
+`.env.example` absent from HEAD, and a completion report named `.env.example`
+remain rejected. No ignored-file override or command-line bypass is added.
+
+The intended separate correction commit is:
+
+```text
+fix: allow tracked env example in review bundles
+```
+
+Correction verification passed 55 focused review-bundle tests and 146 tests in
+the complete authoritative Docker suite. The corrected tool generated the
+complete Task 006 implementation-review bundle without omitting or weakening
+evidence checks.

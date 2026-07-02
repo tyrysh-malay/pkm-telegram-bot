@@ -384,6 +384,132 @@ def test_secret_like_path_is_rejected_but_tokenizer_is_allowed(tmp_path: Path) -
     assert "tokenizer.py" in allowed.stdout
 
 
+def test_modified_tracked_root_env_example_is_complete_tracked_evidence(
+    tmp_path: Path,
+) -> None:
+    repository, report, _ = create_repository(tmp_path)
+    original = b"SETTING=original\n"
+    current = b"SETTING=changed\nNEW_SETTING=example\n"
+    write(repository / ".env.example", original)
+    commit_all(repository, "add public environment template")
+    write(repository / ".env.example", current)
+    expected_diff = git(repository, *DIFF_ARGUMENTS, text=False)
+
+    bundle = fixed_bundle(repository, report)
+
+    assert expected_diff.decode("utf-8") in bundle
+    manifest_line = next(
+        line for line in bundle.splitlines() if line.startswith(".env.example\t")
+    )
+    assert "tracked diff" in manifest_line
+    assert str(len(current)) in manifest_line
+    assert hashlib.sha256(current).hexdigest() in manifest_line
+    assert str(len(original)) in manifest_line
+    assert hashlib.sha256(original).hexdigest() in manifest_line
+
+
+def test_untracked_root_env_example_is_rejected_without_stdout(tmp_path: Path) -> None:
+    repository, report, _ = create_repository(tmp_path)
+    write(repository / ".env.example", "SETTING=example\n")
+
+    result = invoke(repository, report)
+
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "secret-like" in result.stderr
+
+
+def test_staged_root_env_example_absent_from_head_is_rejected(tmp_path: Path) -> None:
+    repository, report, _ = create_repository(tmp_path)
+    write(repository / ".env.example", "SETTING=example\n")
+    git(repository, "add", ".env.example")
+
+    result = invoke(repository, report)
+
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "secret-like" in result.stderr
+
+
+def test_tracked_nested_env_example_is_rejected_without_stdout(tmp_path: Path) -> None:
+    repository, report, _ = create_repository(tmp_path)
+    write(repository / "config/.env.example", "SETTING=original\n")
+    commit_all(repository, "add nested environment template")
+    write(repository / "config/.env.example", "SETTING=changed\n")
+
+    result = invoke(repository, report)
+
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "secret-like" in result.stderr
+
+
+def test_tracked_root_env_example_matching_ignore_rule_is_rejected(
+    tmp_path: Path,
+) -> None:
+    repository, report, _ = create_repository(tmp_path)
+    write(repository / ".env.example", "SETTING=original\n")
+    commit_all(repository, "add public environment template")
+    write(repository / ".gitignore", ".env.example\n")
+    commit_all(repository, "ignore environment templates")
+    write(repository / ".env.example", "SETTING=changed\n")
+
+    result = invoke(repository, report)
+
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "matches an ignore rule" in result.stderr
+
+
+@pytest.mark.parametrize(
+    "path",
+    (".env", ".env.local", ".env.production", ".env.anything"),
+)
+def test_other_root_env_paths_remain_rejected(
+    tmp_path: Path, path: str
+) -> None:
+    repository, report, _ = create_repository(tmp_path)
+    write(repository / path, "SETTING=value\n")
+
+    result = invoke(repository, report)
+
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "secret-like" in result.stderr
+
+
+def test_private_key_in_tracked_root_env_example_is_rejected(
+    tmp_path: Path,
+) -> None:
+    repository, report, _ = create_repository(tmp_path)
+    write(repository / ".env.example", "SETTING=original\n")
+    commit_all(repository, "add public environment template")
+    write(
+        repository / ".env.example",
+        "VALUE=-----BEGIN " + "PRIVATE KEY-----\nnot-a-real-key\n",
+    )
+
+    result = invoke(repository, report)
+
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "private-key header" in result.stderr
+
+
+def test_env_example_completion_report_name_remains_rejected(
+    tmp_path: Path,
+) -> None:
+    repository, _, _ = create_repository(tmp_path)
+    report = tmp_path / ".env.example"
+    write(report, REPORT_TEXT)
+
+    result = invoke(repository, report)
+
+    assert result.returncode != 0
+    assert result.stdout == ""
+    assert "filename is secret-like" in result.stderr
+
+
 def test_private_key_content_is_rejected(tmp_path: Path) -> None:
     repository, report, _ = create_repository(tmp_path)
     write(
