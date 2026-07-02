@@ -2,7 +2,9 @@
 
 A small Python backend for turning Telegram inputs into Git-backed Markdown knowledge artifacts.
 
-The current foundation includes a FastAPI app, PostgreSQL persistence, Alembic migrations, Docker Compose, and tests.
+The current foundation includes a FastAPI app, Telegram text persistence,
+deterministic Markdown note generation, Artifact persistence, Alembic
+migrations, Docker Compose, and tests.
 
 ## Requirements
 
@@ -64,6 +66,9 @@ Apply database migrations:
 ```bash
 docker compose exec app alembic upgrade head
 ```
+
+The Compose app bind-mounts `./knowledge-base` at `/app/knowledge-base`, so
+notes generated with the default configuration remain visible on the host.
 
 Run tests inside the development container:
 
@@ -132,6 +137,32 @@ docker compose logs -f app
 
 Polling mode expects exactly one app process. Do not run multiple Uvicorn workers while polling is enabled.
 
+## Manual Markdown processing
+
+Artifact processing is currently explicit, not automatic. After migrations are
+current, process one already persisted text message by application UUID:
+
+```bash
+docker compose exec app \
+  python -m app.knowledge.cli --message-id <uuid>
+```
+
+Success prints exactly:
+
+```text
+artifact_id: <artifact-uuid>
+file_path: inbox/YYYY-MM-DD--<message-uuid>.md
+```
+
+The command creates or reconciles a deterministic format-version-1 note and
+its Artifact row, then marks the Message `done`. Repeating it returns the same
+Artifact. It does not contact Telegram, start polling, enqueue work, or commit
+the note to Git.
+
+Telegram's `Saved for processing.` acknowledgement still means only that the
+raw message was persisted. The Telegram handler does not invoke this command.
+See `docs/MARKDOWN_ARTIFACTS.md` for rendering and recovery behavior.
+
 ## Environment variables
 
 The app uses:
@@ -142,6 +173,7 @@ The app uses:
 * `TEST_DATABASE_URL`
 * `TELEGRAM_BOT_ENABLED`
 * `TELEGRAM_BOT_TOKEN`
+* `KNOWLEDGE_BASE_PATH` (defaults to `knowledge-base`)
 
 The following variables are documented for later milestones and can remain empty for now:
 

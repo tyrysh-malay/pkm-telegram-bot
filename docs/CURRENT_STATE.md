@@ -17,14 +17,36 @@ Confirmed working:
 * Alembic migrations initialize the test database during pytest.
 * Telegram text ingestion is implemented through aiogram long polling, user
   persistence, message persistence, and duplicate message protection.
+* Persisted text messages can be processed manually into deterministic
+  format-version-1 Markdown notes under `knowledge-base/inbox/`.
+* Artifact metadata is persisted in PostgreSQL, and successful reconciliation
+  establishes `Message.status = "done"`.
+* Same-message processing uses PostgreSQL row locking, uniqueness constraints,
+  atomic no-replace file publication, and explicit filesystem/database
+  reconciliation.
+* The one-message developer command is:
+
+  ```bash
+  python -m app.knowledge.cli --message-id <uuid>
+  ```
+
+The successful manual data flow is:
+
+```text
+persisted text Message
+→ deterministic Markdown note
+→ Artifact row
+→ Message status done
+```
+
 Not implemented:
 
 ```text
 queue
 worker
 AI processing
-Markdown generation
 Git-backed artifact commit
+automatic artifact processing
 Telegram webhook ingestion
 ```
 
@@ -97,7 +119,8 @@ The pytest bootstrap:
    database modules and Alembic run;
 4. creates the test database if it is missing;
 5. initializes the test database from committed Alembic migrations;
-6. deletes test `messages` and `users` only from the test database.
+6. deletes test `artifacts`, `messages`, and `users` in foreign-key order only
+   from the test database.
 
 The application runtime and normal Alembic command still use the development
 database.
@@ -108,13 +131,31 @@ The development image includes Git and copies the complete `scripts/` and
 `tests/` directories. Repository-aware commands still require execution in a
 Git work tree; `.git` is intentionally absent from the image build context.
 
-The focused review-bundle suite passed 44 tests, the compact context suite
-passed 10 tests, and the complete authoritative suite passed 69 tests.
+Task 006 focused rendering, processing, CLI, and migration verification passed:
+60 focused artifact tests, one focused migration test, and 55 focused
+review-bundle tests. The complete authoritative Docker suite passed 146 tests.
+Development database counts remained `users=1`, `messages=1`, and `artifacts=0`
+before and after the complete suite.
 
-Host-to-published-port checks succeeded for both `/health` and `/ready`.
+Migration `0002` upgraded, downgraded to `0001`, and re-upgraded successfully in
+the isolated test database while preserving source tables. A disposable CLI row
+produced exact expected bytes under `/tmp` and was removed afterward. The
+Compose bind mount and hard-link publication primitive were verified without
+leaving a marker or note in the repository knowledge base.
 
-The general `.env.*` rejection remains in force for untracked paths, reports,
-nested templates, and every other filename.
+An earlier build and host-to-published-port check encountered the documented
+local VPN/Docker bridge routing incident. Live rediscovery found active policy
+table `51821`, Docker subnet `172.17.0.0/16` on `docker0`, and Compose subnet
+`172.19.0.0/16` on `br-bed1c43e4e44`. After adding those two temporary return
+routes, the exact `docker compose up -d --build` command succeeded and host
+`/health` and `/ready` requests both succeeded. No repository network
+configuration changed.
+
+Task 006 implementation verification is complete and its review bundle now
+captures the required changed root `.env.example` as tracked evidence. The
+general `.env.*` rejection remains in force for untracked paths, reports,
+nested templates, and every other filename. Task 006 is completed and no next
+task is selected.
 
 ## Known limitations
 
@@ -125,9 +166,15 @@ nested templates, and every other filename.
 * No file or PDF processing.
 * No Redis queue.
 * No background worker.
+* Artifact processing is manual for one message UUID; Telegram ingestion does
+  not invoke it.
 * No AI provider integration.
-* No Markdown artifact generation.
 * No Git-backed artifact commits.
 * No webhook ingestion.
 * Long polling assumes a single app process when enabled.
 * No confirmed user allowlist.
+* Source-message fields are not versioned or made immutable; later manual
+  mutation can surface a deterministic artifact conflict.
+* Atomic no-replace publication assumes a filesystem that supports same-directory
+  hard links, as verified for the current Linux host, pytest temp directories,
+  and Compose bind mount.

@@ -1,6 +1,6 @@
 # Task 006: Generate deterministic Markdown artifacts from persisted text messages
 
-**Status:** planned
+**Status:** completed
 **Depends on:** Tasks 001–005
 **Target file:** `tasks/006-deterministic-markdown-artifacts.md`
 **Expected commit boundary:** one reviewable implementation commit containing the minimal persistence, rendering, storage, processing, CLI, tests, migration, and documentation changes required by this task; Codex must not commit unless explicitly instructed
@@ -2347,6 +2347,32 @@ feat: generate deterministic Markdown notes
 
 Codex must not create the implementation commit unless explicitly instructed.
 
+## Implementation evidence
+
+Implemented and verified on 2026-07-02 without creating an implementation
+commit. Corrected review-bundle generation and the complete authoritative
+verification now succeed; Task 006 is completed.
+
+* Added the minimal Artifact model and `0002` Alembic migration, deterministic
+  format-version-1 renderer, safe no-replace filesystem publication, locked
+  reconciliation processor, and one-message developer CLI.
+* Covered exact rendering, schema constraints, every reconciliation case,
+  idempotency, concurrent sessions, bounded uniqueness retry, injected
+  filesystem/database failures, source validation, migration rollback, and CLI
+  behavior with PostgreSQL-backed and temporary-directory tests.
+* Verified 60 focused rendering/processing/CLI tests, the isolated Artifact
+  migration test, 55 focused review-bundle tests, and 146 tests in the complete
+  fresh-image Docker suite.
+* Verified isolated `0002 → 0001 → 0002` migration behavior, unchanged
+  development counts (`users=1`, `messages=1`, `artifacts=0`), exact disposable
+  CLI output, host-visible bind mounting, hard-link support, knowledge-base
+  cleanliness, and in-container `200` responses from `/health` and `/ready`.
+* An earlier host-published curl and bridge build attempt timed out because the
+  documented local VPN policy table lacked current Docker return routes. After
+  rediscovering active table `51821` and temporarily adding the current
+  `172.17.0.0/16` and `172.19.0.0/16` bridge routes, the exact Compose build and
+  host `/health` and `/ready` checks succeeded.
+
 ## Amendment — Task 005 review packaging correction
 
 Accepted on 2026-07-02 after the review-packaging conflict was confirmed.
@@ -2360,3 +2386,11 @@ The correction is limited to `scripts/review_bundle.py`,
 `tests/test_review_bundle.py`, the appended Task 005 amendment, and the D-024
 clarification. Application, database, migration, Telegram, Markdown rendering,
 storage, processing, and CLI behavior remain outside the correction boundary.
+Task 006 completion followed successful corrected-bundle generation and complete
+authoritative verification.
+
+The corrected bundler subsequently generated the complete Task 006 bundle with
+`.env.example` represented as tracked evidence and every other changed and
+untracked path included. The tracked root `.env.example` correction is
+implemented, corrected bundle generation succeeds, Task 006 is completed, and
+no implementation commit was created.
