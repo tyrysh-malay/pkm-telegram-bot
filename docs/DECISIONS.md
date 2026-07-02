@@ -834,6 +834,13 @@ or completion-report change invalidates it. Separately uploaded conflicting
 files do not override bundle evidence; a conflict requires generating a fresh
 bundle.
 
+The sole path-level exception to the secret-like filename policy is the exact
+repository-root `.env.example` public template when it already exists at HEAD
+as a regular tracked blob and is captured as tracked changed evidence. It still
+must be non-ignored and pass every ordinary type, content, size, diff, and
+consistency validation. The exception does not apply to untracked files,
+completion reports, nested templates, or any other `.env` name.
+
 **Context or problem**
 
 The Task 004 context report intentionally contains metadata rather than full
@@ -853,6 +860,8 @@ complete without leaking or silently omitting content.
 * Review packaging remains separate from the compact Task 004 context report.
 * Ignored, secret-like, binary, invalid-text, symlinked, submodule, special, or
   oversized changed evidence causes bundle generation to fail.
+* Exact tracked root `.env.example` is the only path-level exception and remains
+  subject to all non-path safety checks.
 * The tool neither redacts nor truncates required evidence.
 * The tool performs no upload, commit, push, repository write, or network
   operation.

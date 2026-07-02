@@ -2346,3 +2346,17 @@ feat: generate deterministic Markdown notes
 ```
 
 Codex must not create the implementation commit unless explicitly instructed.
+
+## Amendment — Task 005 review packaging correction
+
+Accepted on 2026-07-02 after the review-packaging conflict was confirmed.
+Task 006 retains its requirement to document `KNOWLEDGE_BASE_PATH` in the
+committed root `.env.example` template. The user explicitly authorized a
+separate, narrowly scoped Task 005 tooling correction so that this exact
+tracked-at-HEAD template can be captured without making `.env.example`
+generally non-secret-like.
+
+The correction is limited to `scripts/review_bundle.py`,
+`tests/test_review_bundle.py`, the appended Task 005 amendment, and the D-024
+clarification. Application, database, migration, Telegram, Markdown rendering,
+storage, processing, and CLI behavior remain outside the correction boundary.
