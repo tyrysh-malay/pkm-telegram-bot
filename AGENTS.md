@@ -45,12 +45,23 @@ Do not split the MVP into multiple repositories or services.
 
 Before implementing a task:
 
-1. Read the relevant file in `tasks/`.
-2. Read relevant docs in `docs/`.
-3. Propose a concise implementation plan.
-4. Make the smallest useful change.
-5. Add or update tests when behavior changes.
-6. Run formatting and tests if available.
+1. Inspect the current branch, HEAD, status, recent commits, and diff.
+2. Read the active task, `docs/CURRENT_STATE.md`, `docs/WORKFLOW.md`, and every
+   document referenced by the task.
+3. Inspect relevant live code, tests, configuration, and repository structure
+   before trusting documentation. Distinguish verified facts from stale or
+   aspirational claims and report contradictions.
+4. Present a concise implementation plan before editing.
+5. Make the smallest in-scope change. Avoid postponed functionality,
+   speculative abstractions, and unrelated refactoring.
+6. Add or update tests, then run the task's acceptance verification.
+7. Update affected documentation only after behavior is verified.
+8. Protect secrets and do not expose local configuration values.
+9. Do not commit unless explicitly instructed.
+10. Produce the completion report required by the active task.
+
+The complete lifecycle, conversation responsibilities, source-of-truth rules,
+and documentation update matrix are in `docs/WORKFLOW.md`.
 
 ## Code style
 

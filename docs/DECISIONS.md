@@ -763,6 +763,54 @@ committed migrations rather than relying on runtime `create_all()`.
 
 ---
 
+## D-023 — Use repository-local workflow and read-only context reports
+
+**Decision**
+
+Repository-local task files and documentation define the development workflow.
+Accepted task specifications are normally committed before implementation, and
+implementation is reviewed against that accepted contract.
+
+Codex inspects the live local working tree and does not treat documentation as
+stronger evidence than repository state. Affected documentation is updated
+after behavior is verified.
+
+The standard compact handoff to Web Chat is the read-only Markdown report from:
+
+```bash
+python3 scripts/project_context.py
+```
+
+The report and uploaded files are point-in-time snapshots, not sources of
+truth, and may become stale. Possible future GitHub retrieval would describe
+only the committed and pushed baseline, not uncommitted local work.
+
+**Context or problem**
+
+Project facts were spread across Git history, the working tree, documentation,
+and uploaded snapshots, making stale context easy to mistake for current state.
+
+**Reasoning**
+
+A small repository-owned lifecycle and deterministic metadata report make
+handoffs repeatable without adding synchronization machinery or granting Web
+Chat repository access.
+
+**Consequences**
+
+* Task specifications and implementation commits remain distinguishable where
+  practical.
+* Review compares the implementation with the committed task requirements.
+* Generated context must be refreshed after repository changes.
+* Automatic commits and automatic rewriting of `docs/CURRENT_STATE.md` are not
+  part of this decision.
+
+**Status:** accepted
+
+**Related task:** Task 004
+
+---
+
 # Possible future ADR split
 
 If this file becomes too large, the following decisions are good candidates for individual ADR files:

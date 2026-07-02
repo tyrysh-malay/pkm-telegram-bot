@@ -81,6 +81,22 @@ Check the database readiness endpoint:
 curl http://localhost:8000/ready
 ```
 
+## Repository context
+
+Print a compact Markdown snapshot of safe repository facts to standard output:
+
+```bash
+python3 scripts/project_context.py
+```
+
+The command is read-only. To save a handoff outside the repository:
+
+```bash
+python3 scripts/project_context.py > /tmp/pkm-project-context.md
+```
+
+See `docs/WORKFLOW.md` for the full repository-driven project workflow.
+
 ## Telegram polling
 
 Telegram polling is disabled by default so local development and automated tests do not need a bot token.
