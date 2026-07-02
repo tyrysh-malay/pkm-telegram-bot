@@ -873,6 +873,60 @@ complete without leaking or silently omitting content.
 
 ---
 
+## D-025 — Render and reconcile deterministic Markdown notes explicitly
+
+**Decision**
+
+Render text-message notes deterministically in application code using
+`format_version = 1`. Identify a note file by the source Message's UTC date and
+full UUID:
+
+```text
+inbox/YYYY-MM-DD--<full-message-uuid>.md
+```
+
+Artifact rows store operational metadata and a relative path. Title and slug
+are deterministic metadata but do not determine file identity.
+
+Processing locks the source Message and relies on database uniqueness as final
+duplicate protection. Files are published atomically without replacing an
+existing name. An exact file left without a row after database failure is
+preserved and reconciled on the next invocation; conflicting files and
+inconsistent rows fail rather than being overwritten or silently repaired.
+
+Set the Message to `done` only when the exact file and valid Artifact row are
+both established. Task 006 invokes this boundary manually for one UUID and does
+not add a queue or worker.
+
+**Context or problem**
+
+PostgreSQL and the filesystem cannot share a transaction. The first artifact
+slice needs stable bytes, idempotency, and recoverability before background
+orchestration is introduced.
+
+**Reasoning**
+
+A source-derived path and pure renderer make repeated output comparable.
+No-replace publication protects user-visible files, while accepting exact
+orphans provides a small recovery rule without an outbox, transaction log, or
+compensating deletion.
+
+**Consequences**
+
+* PostgreSQL remains the operational metadata store and Markdown remains the
+  readable artifact.
+* Repeated and concurrent calls establish one note row and one exact file.
+* Database failure may leave a safe exact orphan file by design.
+* Source fields are not versioned; later manual mutation can surface a conflict.
+* Automatic selection, retries, queues, workers, AI, and Git commits remain
+  separate future work.
+
+**Status:** accepted
+
+**Related task:** Task 006
+
+---
+
 # Possible future ADR split
 
 If this file becomes too large, the following decisions are good candidates for individual ADR files:

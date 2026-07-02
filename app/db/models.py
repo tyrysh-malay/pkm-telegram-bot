@@ -83,3 +83,44 @@ class Message(Base):
     )
 
     user: Mapped[User] = relationship(back_populates="messages")
+    artifacts: Mapped[list["Artifact"]] = relationship(back_populates="message")
+
+
+class Artifact(Base):
+    __tablename__ = "artifacts"
+    __table_args__ = (
+        UniqueConstraint(
+            "message_id",
+            "artifact_type",
+            name="uq_artifacts_message_id_artifact_type",
+        ),
+        UniqueConstraint("file_path", name="uq_artifacts_file_path"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("messages.id"),
+        nullable=False,
+    )
+    artifact_type: Mapped[str] = mapped_column(Text, nullable=False)
+    title: Mapped[str] = mapped_column(Text, nullable=False)
+    slug: Mapped[str] = mapped_column(Text, nullable=False)
+    file_path: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    message: Mapped[Message] = relationship(back_populates="artifacts")

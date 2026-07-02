@@ -1,30 +1,12 @@
 # Data Model
 
-## Purpose
-
-PostgreSQL stores operational state required to process Telegram inputs reliably.
-
-It does not replace the Markdown knowledge repository.
-
-The initial schema should remain small and support later extensions without trying to model a full knowledge graph.
-
-## Initial entities
-
-Task 001 introduces:
-
-* users;
-* messages;
-* processing tasks;
-* artifacts;
-* processing events.
-
-Only the fields required for current or near-future behavior should be implemented.
+PostgreSQL stores operational state. Markdown files under the configured
+knowledge-base root are the human-readable artifacts; Git history is postponed.
+Alembic migrations, not runtime `create_all()`, own the schema.
 
 ## User
 
-Represents a Telegram user known to the application.
-
-Suggested fields:
+`users` represents a Telegram sender:
 
 ```text
 id                  UUID primary key
@@ -36,20 +18,16 @@ created_at           TIMESTAMPTZ not null
 updated_at           TIMESTAMPTZ not null
 ```
 
-Constraints:
-
-* `telegram_user_id` must be unique.
-* Telegram names are optional and may change.
+Telegram profile fields are mutable. `telegram_user_id` is the stable external
+identity.
 
 ## Message
 
-Represents one input received from Telegram.
-
-Suggested fields:
+`messages` represents one persisted Telegram input:
 
 ```text
 id                    UUID primary key
-user_id               UUID foreign key to users
+user_id               UUID foreign key to users, not null
 telegram_chat_id      BIGINT not null
 telegram_message_id   BIGINT not null
 input_type            TEXT not null
@@ -63,166 +41,53 @@ created_at             TIMESTAMPTZ not null
 updated_at             TIMESTAMPTZ not null
 ```
 
-Initial input types:
-
-```text
-text
-voice
-image
-link
-file
-```
-
-Initial statuses:
-
-```text
-received
-queued
-processing
-done
-failed
-```
-
-Recommended idempotency key:
-
-```text
-telegram:<chat_id>:<message_id>
-```
-
-A Telegram message should be persisted only once.
-
-## Processing task
-
-Represents background work associated with a message.
-
-Suggested fields:
-
-```text
-id             UUID primary key
-message_id     UUID foreign key to messages
-task_type      TEXT not null
-status         TEXT not null
-attempts       INTEGER not null, default 0
-max_attempts   INTEGER not null, default 3
-last_error     TEXT nullable
-locked_at      TIMESTAMPTZ nullable
-created_at     TIMESTAMPTZ not null
-updated_at     TIMESTAMPTZ not null
-```
-
-Initial statuses:
-
-```text
-queued
-running
-retrying
-succeeded
-failed
-```
-
-Processing tasks will not be executed in Task 001. The table may be introduced now or postponed until the queue milestone if it would otherwise contain unused logic.
+Current ingestion creates text messages with `status = "received"`. Manual
+artifact processing accepts `received` or `done` text messages and establishes
+`status = "done"` only after an exact note and valid Artifact row exist. Status
+is unrestricted text at the database level and is not proof of filesystem
+consistency.
 
 ## Artifact
 
-Represents a generated knowledge artifact.
-
-Suggested fields:
+`artifacts` represents operational metadata for a generated file:
 
 ```text
 id                 UUID primary key
-message_id         UUID foreign key to messages
+message_id         UUID foreign key to messages, not null
 artifact_type      TEXT not null
 title              TEXT not null
 slug               TEXT not null
 file_path          TEXT not null
-summary            TEXT nullable
-tags               JSON or PostgreSQL ARRAY nullable
-topics             JSON or PostgreSQL ARRAY nullable
-git_commit_sha     TEXT nullable
 created_at         TIMESTAMPTZ not null
 updated_at         TIMESTAMPTZ not null
 ```
 
-Initial artifact types:
+Constraints:
 
 ```text
-note
-source_summary
-idea_card
-draft_article
-todo
+UNIQUE(message_id, artifact_type)
+UNIQUE(file_path)
 ```
 
-Artifacts will not be generated during Task 001.
+Task 006 processing supports only `artifact_type = "note"`; the database uses
+text rather than an enum or type check. `file_path` is a POSIX path relative to
+`KNOWLEDGE_BASE_PATH`. Title and slug are deterministic metadata but do not
+identify the file. The message relation has no artifact cascade-delete policy.
 
-## Processing event
+The table deliberately has no summary, tags, topics, Git SHA, version, content
+hash, processing-task reference, or generic metadata field. Frontmatter tags
+and topics are empty format fields, not database columns.
 
-Represents an append-only operational event.
+## Postponed entities
 
-Suggested fields:
+`processing_tasks` and `processing_events` are not implemented. Queue state,
+retries, worker ownership, artifact history, and Git commit metadata require
+later explicit tasks.
 
-```text
-id             UUID primary key
-message_id     UUID nullable, foreign key to messages
-task_id        UUID nullable, foreign key to processing tasks
-event_type     TEXT not null
-payload        JSONB nullable
-created_at     TIMESTAMPTZ not null
-```
-
-Example event types:
+## Source ownership
 
 ```text
-message_received
-task_enqueued
-task_started
-artifact_written
-task_failed
-```
-
-This table may be postponed until task processing exists.
-
-## Task 001 minimum schema
-
-The smallest useful Task 001 schema is:
-
-```text
-users
-messages
-```
-
-This is enough to support the next task: receiving and persisting Telegram text messages.
-
-`processing_tasks`, `artifacts`, and `processing_events` can be added when their corresponding runtime behavior is implemented.
-
-## Model conventions
-
-* Use UUID application identifiers.
-* Use timezone-aware timestamps.
-* Keep Telegram identifiers as BIGINT.
-* Use explicit foreign keys.
-* Add uniqueness constraints at the database level.
-* Do not store Python enum names without a migration strategy.
-* Avoid database-specific abstractions unless they provide clear value.
-* Do not implement soft deletion in the MVP.
-* Do not create a generic metadata table.
-
-## Source of truth
-
-Operational state:
-
-```text
-PostgreSQL
-```
-
-Human-readable knowledge:
-
-```text
-Markdown files
-```
-
-Repository history:
-
-```text
-Git
+operational state        PostgreSQL
+human-readable artifact Markdown file
+repository history       Git (not yet automated)
 ```

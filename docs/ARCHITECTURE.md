@@ -1,194 +1,109 @@
 # Architecture
 
-## Current goal
+## Current runtime
 
-Build a small but production-minded Telegram ingestion pipeline that converts user inputs into structured Markdown artifacts.
-
-The system should be developed incrementally. Each task should introduce one clear responsibility and keep the repository runnable.
-
-## Runtime architecture
-
-The planned MVP uses one codebase with two runtime processes:
+The repository is one Python codebase. The current Docker Compose runtime has
+an application process and PostgreSQL:
 
 ```text
-Telegram
-   |
-   v
-App process
-- FastAPI
-- aiogram
-- input validation
-- persistence
-- enqueue processing task
-   |
-   +------> PostgreSQL
-   |
-   +------> Redis
-               |
-               v
-          Worker process
-          - extraction
-          - AI processing
-          - Markdown rendering
-          - Git writing
-               |
-               v
-        knowledge-base/
+Telegram long polling (optional)
+        |
+        v
+FastAPI + aiogram app
+        |
+        v
+PostgreSQL users and messages
 ```
+
+The application exposes `/health` and `/ready`. When enabled, aiogram persists
+Telegram text input before acknowledging it. No queue or background worker is
+running.
+
+## Manual artifact-processing boundary
+
+Task 006 adds an independently invoked processing path:
+
+```text
+developer CLI
+    |
+    v
+process_text_message(...)
+    |
+    +--> lock one persisted text Message
+    +--> render deterministic format-version-1 Markdown
+    +--> publish knowledge-base/inbox/... without overwrite
+    +--> insert or validate one Artifact row
+    +--> set Message status to done
+```
+
+The command runs in the application environment but does not start FastAPI,
+Telegram polling, or a worker. A future worker may reuse the processing
+function; Task 006 does not select or enqueue messages automatically.
+
+PostgreSQL and the filesystem do not share a transaction. Recovery is by
+deterministic reconciliation: an exact file without a row is retained and can
+be attached to a new row on the next explicit invocation; a valid row with a
+missing file can recreate it. Conflicting files and inconsistent rows fail
+without replacement or silent repair.
 
 ## Components
 
 ### App process
 
-Responsibilities:
+Current responsibilities:
 
-* expose health endpoints;
-* receive Telegram updates;
-* validate and normalize incoming messages;
-* persist raw message metadata;
-* create background processing jobs;
-* return a fast acknowledgement to the user.
+* expose liveness and database-readiness endpoints;
+* run optional single-process Telegram long polling;
+* validate and persist Telegram text messages;
+* provide the manual one-message artifact CLI and reusable processing code.
 
-The app process must not perform slow AI or media-processing work directly.
-
-### Worker process
-
-Responsibilities:
-
-* load persisted messages;
-* download or extract input content;
-* call transcription, vision, or text AI services;
-* validate structured outputs;
-* render deterministic Markdown;
-* write artifacts to the knowledge repository;
-* update processing status.
-
-The worker will be introduced after text ingestion is working.
+Telegram acknowledgement remains persistence-only. The Telegram handler does
+not invoke artifact processing.
 
 ### PostgreSQL
 
-PostgreSQL stores operational state:
+PostgreSQL stores users, messages, and Artifact metadata. Row locking and
+uniqueness constraints serialize and protect same-message note processing.
+Markdown files remain the readable knowledge output.
 
-* users;
-* Telegram messages;
-* processing tasks;
-* artifacts;
-* processing events.
+### Knowledge base
 
-Markdown files, not PostgreSQL rows, are the human-readable knowledge artifacts.
-
-### Redis
-
-Redis will later provide:
-
-* task queue broker;
-* temporary locks;
-* rate limiting;
-* short-lived processing state.
-
-Redis is not needed for the persistence foundation task.
-
-### Knowledge repository
-
-Generated knowledge artifacts are stored under:
+`KNOWLEDGE_BASE_PATH` defaults to `knowledge-base`. Current notes use only:
 
 ```text
 knowledge-base/
   inbox/
-  notes/
-  sources/
-  ideas/
-  drafts/
-  assets/
 ```
 
-Markdown files should use YAML frontmatter and deterministic filenames.
+Compose bind-mounts this directory from the host. Publication uses a fully
+written same-directory temporary file and a hard-link no-replace operation.
+Git commits are not automated.
 
-Git commits will be introduced after deterministic Markdown generation is working.
+### Worker and Redis
 
-## Deployment model
-
-The MVP uses Docker Compose.
-
-Planned services:
-
-```text
-app
-worker
-postgres
-redis
-```
-
-During early milestones, only the services required by the current task should be enabled.
+A separate Dramatiq worker and Redis broker remain planned architecture, not
+implemented behavior. Their future task must define queue semantics, retries,
+crash recovery, and status transitions without changing the deterministic
+processing contract accidentally.
 
 ## Design principles
 
-1. Build vertical slices incrementally.
-2. Keep one codebase.
-3. Avoid microservices.
-4. Persist operational state before introducing asynchronous processing.
-5. Keep AI outputs structured.
-6. Render Markdown deterministically in code.
-7. Make failure states visible.
-8. Prefer small, reviewable commits.
-
-## Planned implementation stages
-
-### Stage 0: Bootstrap
-
-* FastAPI application;
-* health endpoint;
-* Docker development environment;
-* pytest setup.
-
-### Stage 1: Persistence foundation
-
-* PostgreSQL;
-* SQLAlchemy;
-* Alembic;
-* initial database models;
-* database connectivity checks.
-
-### Stage 2: Telegram text ingestion
-
-* aiogram;
-* Telegram update handling;
-* user and message persistence;
-* duplicate update protection.
-
-### Stage 3: Background Markdown processing
-
-* Redis;
-* Dramatiq;
-* processing tasks;
-* raw Markdown rendering;
-* artifact persistence.
-
-### Stage 4: AI note generation
-
-* structured AI output;
-* schema validation;
-* deterministic Markdown rendering;
-* fallback behavior.
-
-### Stage 5: Multi-modal inputs
-
-* links;
-* voice;
-* images;
-* later PDFs and files.
+1. Persist input before downstream processing.
+2. Keep one codebase and add runtime processes only when needed.
+3. Render durable Markdown bytes deterministically in application code.
+4. Make cross-resource recovery explicit rather than pretending PostgreSQL and
+   the filesystem are one transaction.
+5. Keep AI, multimodal processing, Git writing, and queue orchestration outside
+   the current manual slice.
 
 ## Postponed architecture
 
-Do not introduce yet:
+Not implemented:
 
-* LangChain;
-* LangGraph;
-* vector databases;
-* RAG;
-* microservices;
-* Kubernetes;
-* web UI;
-* multi-user permissions;
-* GitHub synchronization;
-* autonomous multi-agent behavior.
+* automatic message processing;
+* Redis or Dramatiq;
+* an active worker process;
+* AI generation;
+* voice, image, link, file, or PDF processing;
+* Git commits or synchronization;
+* LangChain, LangGraph, vector databases, RAG, microservices, or Kubernetes.

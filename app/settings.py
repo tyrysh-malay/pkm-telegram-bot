@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -12,6 +13,7 @@ class Settings(BaseSettings):
     database_url: str | None = None
     test_database_url: str | None = None
     redis_url: str | None = None
+    knowledge_base_path: Path = Path("knowledge-base")
 
     model_config = SettingsConfigDict(
         env_file=".env",

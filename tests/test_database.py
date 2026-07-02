@@ -29,16 +29,42 @@ def test_database_connectivity() -> None:
     asyncio.run(run())
 
 
-def test_migration_created_users_and_messages_tables() -> None:
+def test_migrations_created_users_messages_and_artifacts_tables() -> None:
     async def run() -> None:
         async with get_engine().connect() as connection:
             result = await connection.execute(
                 text(
                     "SELECT to_regclass('public.users')::text, "
-                    "to_regclass('public.messages')::text"
+                    "to_regclass('public.messages')::text, "
+                    "to_regclass('public.artifacts')::text"
                 )
             )
 
-        assert result.one() == ("users", "messages")
+        assert result.one() == ("users", "messages", "artifacts")
+
+    asyncio.run(run())
+
+
+def test_artifacts_table_has_only_task006_business_columns() -> None:
+    async def run() -> None:
+        async with get_engine().connect() as connection:
+            result = await connection.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema = 'public' AND table_name = 'artifacts' "
+                    "ORDER BY ordinal_position"
+                )
+            )
+
+        assert [row[0] for row in result] == [
+            "id",
+            "message_id",
+            "artifact_type",
+            "title",
+            "slug",
+            "file_path",
+            "created_at",
+            "updated_at",
+        ]
 
     asyncio.run(run())
