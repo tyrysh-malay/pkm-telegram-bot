@@ -1,6 +1,6 @@
 # Task 004: Establish repository-driven workflow and context reporting
 
-**Status:** planned
+**Status:** completed
 **Depends on:** Tasks 000–003
 **Target file:** `tasks/004-repository-workflow-context.md`
 **Expected implementation boundary:** one small documentation-and-tooling change after the task specification itself has been committed
@@ -1169,3 +1169,13 @@ chore: add project context reporting
 ```
 
 Do not include unrelated application changes in the same commit.
+
+## Completion evidence
+
+Implemented in the working tree with repository-local workflow documentation,
+task template, read-only context-reporting utility, automated utility tests, and
+the durable decision D-023.
+
+The authoritative development image rebuilt successfully. The focused context
+suite passed 10 tests, the complete suite passed 25 tests, and the host-published
+`/health` and `/ready` checks returned successful JSON responses.

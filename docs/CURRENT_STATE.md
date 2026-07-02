@@ -1,40 +1,22 @@
 # Current Project State
 
-This document is intentionally short-lived. Replace or substantially update it
-after each completed task.
+This document describes the current semantic state of the repository. Generated
+context reports and Git commands provide branch, commit, recent-commit, and
+working-tree facts.
 
-## Repository checkpoint
-
-**Branch:** `main`
-
-**Latest commit before Task 003 implementation:** `6df74b6 docs: Define database test isolation task`
-
-**Working tree status:** contains uncommitted Task 003 changes.
+**Active task:** none selected
 
 ## Working functionality
 
 Confirmed working:
 
-* Docker Compose builds and starts the application.
 * PostgreSQL starts through Docker Compose.
-* FastAPI starts under Uvicorn.
-* `GET /health` returns `200 OK`.
-* `GET /ready` returns `200 OK`.
-* Alembic migrations apply to the development database with:
-
-  ```bash
-  docker compose exec app alembic upgrade head
-  ```
-
-* The full pytest suite passes inside the application container:
-
-  ```text
-  15 passed in 5.42s
-  ```
-
-* Telegram text ingestion remains implemented through aiogram long polling, user
+* FastAPI starts under Uvicorn in the app container.
+* Inside the app container, `GET /health` returns `200 OK`.
+* Inside the app container, `GET /ready` returns `200 OK`.
+* Alembic migrations initialize the test database during pytest.
+* Telegram text ingestion is implemented through aiogram long polling, user
   persistence, message persistence, and duplicate message protection.
-
 Not implemented:
 
 ```text
@@ -46,21 +28,45 @@ Git-backed artifact commit
 Telegram webhook ingestion
 ```
 
+## Repository workflow and context reporting
+
+Task 004 is complete. It adds the repository-local workflow documentation:
+
+```text
+docs/WORKFLOW.md
+```
+
+The reusable task specification template is:
+
+```text
+tasks/TEMPLATE.md
+```
+
+The read-only project context report command is:
+
+```bash
+python3 scripts/project_context.py
+```
+
+The command prints Markdown to standard output. It uses read-only Git queries
+and whitelisted task/document metadata, writes nothing, does not read `.env` or
+environment variables, and redacts secret-like changed-path names.
+
+To create a handoff file outside the repository:
+
+```bash
+python3 scripts/project_context.py > /tmp/pkm-project-context.md
+```
+
+Generated reports are point-in-time snapshots. The live repository remains the
+source of truth.
+
 ## Database test isolation
 
-Task 003 is implemented.
+The development application uses `DATABASE_URL`.
 
-The development application uses:
-
-```text
-DATABASE_URL=postgresql+asyncpg://pkm:pkm@postgres:5432/pkm
-```
-
-Pytest uses:
-
-```text
-TEST_DATABASE_URL=postgresql+asyncpg://pkm:pkm@postgres:5432/pkm_test
-```
+Pytest uses `TEST_DATABASE_URL`, which must target a different database name
+from `DATABASE_URL`.
 
 The pytest bootstrap:
 
@@ -68,74 +74,22 @@ The pytest bootstrap:
 2. rejects a test URL that targets the same database name as `DATABASE_URL`;
 3. sets `DATABASE_URL` to `TEST_DATABASE_URL` inside the pytest process before
    database modules and Alembic run;
-4. creates `pkm_test` if it is missing;
-5. initializes `pkm_test` from committed Alembic migrations;
-6. deletes test `messages` and `users` only from `pkm_test`.
+4. creates the test database if it is missing;
+5. initializes the test database from committed Alembic migrations;
+6. deletes test `messages` and `users` only from the test database.
 
 The application runtime and normal Alembic command still use the development
 database.
 
-## Task 003 verification
+## Verification notes
 
-Before pytest, a development marker row existed:
+The updated Dockerfile includes `git` so the Git-based context utility can run
+inside the development image.
 
-```text
-users=1
-messages=1
-marker_messages=1
-fixture_users=0
-```
+The updated development image rebuilt successfully. The focused context suite
+passed 10 tests, and the complete authoritative suite passed 25 tests.
 
-The rebuilt Compose services were verified with:
-
-```bash
-docker compose up -d --build
-docker compose config --quiet
-docker compose exec app alembic upgrade head
-docker compose exec app python -m pytest
-```
-
-The `docker compose up -d --build` command succeeded. Docker Compose printed a
-warning that Bake is configured but `buildx` is not installed.
-
-The test database was migrated and cleaned:
-
-```text
-database=pkm_test
-alembic_version=0001
-test_users=0
-test_messages=0
-```
-
-After pytest, the development database was unchanged:
-
-```text
-users=1
-messages=1
-marker_messages=1
-fixture_users=0
-```
-
-The checked fixture usernames were absent from the development database:
-
-```text
-duplicate_user
-new_username
-original_user
-pkm_user
-```
-
-Endpoint checks after the pytest run:
-
-```text
-/health -> {"status":"ok","app":"PKM Telegram Bot","environment":"development"}
-/ready  -> {"status":"ready","database":"ok"}
-```
-
-The rebuilt local app configuration has Telegram polling enabled and a token
-present. A live Telegram regression message was not sent from this environment,
-so live Telegram acknowledgement and row creation remain unverified for Task 003
-finalization.
+Host-to-published-port checks succeeded for both `/health` and `/ready`.
 
 ## Known limitations
 
@@ -152,9 +106,3 @@ finalization.
 * No webhook ingestion.
 * Long polling assumes a single app process when enabled.
 * No confirmed user allowlist.
-
-## Immediate next actions
-
-1. Review and commit the Task 003 isolation changes.
-2. Keep the Telegram identity concern separate unless repository evidence shows
-   a confirmed bug.
