@@ -95,6 +95,21 @@ The command is read-only. To save a handoff outside the repository:
 python3 scripts/project_context.py > /tmp/pkm-project-context.md
 ```
 
+Use the compact report for orientation and metadata handoff. For review of an
+uncommitted task implementation, generate the full implementation-review bundle:
+
+```bash
+python3 scripts/review_bundle.py \
+  --task tasks/<active-task>.md \
+  --report /tmp/<task>-handoff.md \
+  > /tmp/<task>-review-bundle.md
+```
+
+The completion report and redirected bundle should normally stay outside the
+repository. The command is read-only, never includes ignored files, and fails
+instead of truncating or packaging unsafe, unsupported, or oversized evidence.
+The compact context report and full review bundle serve different purposes.
+
 See `docs/WORKFLOW.md` for the full repository-driven project workflow.
 
 ## Telegram polling

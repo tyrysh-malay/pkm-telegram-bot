@@ -182,7 +182,10 @@ rewritten. Record amendments with reasons and return material changes to task
 planning. Keep specification and implementation commits distinguishable where
 practical.
 
-## Context report
+## Context and implementation-review reports
+
+Use the compact project-context report for orientation, planning handoff, and
+metadata checks that do not require implementation contents:
 
 From the repository root, run:
 
@@ -204,3 +207,30 @@ python3 scripts/project_context.py > /tmp/pkm-project-context.md
 
 Always label the generated file as point-in-time context and re-run it when the
 repository changes.
+
+Implementation review requires the separate full bundle. After implementation,
+verification, and documentation updates, Codex writes the task's explicit
+completion report outside the repository, normally under `/tmp`, then runs:
+
+```bash
+python3 scripts/review_bundle.py \
+  --task tasks/<active-task>.md \
+  --report /tmp/<task>-handoff.md \
+  > /tmp/<task>-review-bundle.md
+```
+
+The committed task specification is the review contract. Captured Git status,
+the tracked diff, and complete safe untracked-file contents are the
+implementation state. The completion report supplies Codex's explanations and
+verification claims; bundle generation does not independently execute or
+validate those claims.
+
+The bundle command is read-only and emits Markdown only after complete evidence
+passes its ignored-path, secret, text, file-type, size, and consistency checks.
+It includes neither ignored files nor partial or truncated substitutes for
+rejected evidence.
+
+Regenerate the bundle after any implementation, documentation, task, or
+completion-report change. Separately uploaded files must not silently override
+or be combined with conflicting bundle evidence; a conflict requires a fresh
+bundle from the current repository and report.

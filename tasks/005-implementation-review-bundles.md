@@ -1,6 +1,6 @@
 # Task 005: Generate self-contained implementation review bundles
 
-**Status:** planned
+**Status:** completed
 **Depends on:** Task 004
 **Target file:** `tasks/005-implementation-review-bundles.md`
 **Expected commit boundary:** one reviewable documentation-and-tooling implementation commit; the accepted task specification must be committed before implementation, and Codex must not commit implementation changes unless explicitly instructed
@@ -1542,3 +1542,20 @@ chore: add implementation review bundles
 ```
 
 Codex must not create the implementation commit unless explicitly instructed.
+
+## Completion evidence
+
+Completed on 2026-07-02 without creating an implementation commit.
+
+* Added the standalone read-only `scripts/review_bundle.py` command and focused
+  real-Git coverage in `tests/test_review_bundle.py` without changing the compact
+  `scripts/project_context.py` command.
+* Documented review generation and evidence precedence in `docs/WORKFLOW.md` and
+  `README.md`, recorded D-024, and updated current semantic state.
+* Verified 44 focused review-bundle tests, 10 project-context regression tests,
+  and 69 tests in the complete authoritative Docker suite.
+* Verified host-side compact-report generation, a complete review-bundle smoke
+  generation, unchanged Git status across bundle generation, and successful
+  `/health` and `/ready` checks.
+* Kept application, database, migration, Telegram, worker, environment, and
+  Dockerfile behavior unchanged.
