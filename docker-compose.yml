@@ -1,5 +1,6 @@
 services:
   app:
+    image: pkm-telegram-bot:local
     build:
       context: .
       args:
@@ -17,8 +18,33 @@ services:
       TELEGRAM_BOT_ENABLED: "${TELEGRAM_BOT_ENABLED:-false}"
       TELEGRAM_BOT_TOKEN: "${TELEGRAM_BOT_TOKEN:-}"
       KNOWLEDGE_BASE_PATH: "${KNOWLEDGE_BASE_PATH:-knowledge-base}"
+      REDIS_URL: "${REDIS_URL:-redis://redis:6379/0}"
+      TASK_DISPATCHER_ENABLED: "true"
     volumes:
       - ./knowledge-base:/app/knowledge-base
+
+  worker:
+    image: pkm-telegram-bot:local
+    command: ["dramatiq", "app.worker.tasks", "--processes", "1", "--threads", "1"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: "${DATABASE_URL:-postgresql+asyncpg://pkm:pkm@postgres:5432/pkm}"
+      REDIS_URL: "${REDIS_URL:-redis://redis:6379/0}"
+      KNOWLEDGE_BASE_PATH: "${KNOWLEDGE_BASE_PATH:-knowledge-base}"
+    volumes:
+      - ./knowledge-base:/app/knowledge-base
+
+  redis:
+    image: redis:7
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
   postgres:
     image: postgres:16

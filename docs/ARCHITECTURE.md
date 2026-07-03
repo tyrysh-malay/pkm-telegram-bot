@@ -2,8 +2,8 @@
 
 ## Current runtime
 
-The repository is one Python codebase. The current Docker Compose runtime has
-an application process and PostgreSQL:
+The repository remains one Python codebase with two runtime processes and two
+infrastructure services:
 
 ```text
 Telegram long polling (optional)
@@ -11,20 +11,33 @@ Telegram long polling (optional)
         v
 FastAPI + aiogram app
         |
-        v
-PostgreSQL users and messages
+        +-- atomic Message + ProcessingTask --> PostgreSQL
+        |
+        +-- dispatcher: ProcessingTask UUID --> Redis
+                                               |
+                                               v
+                                      Dramatiq worker
+                                               |
+                          PostgreSQL claim/lease/attempt
+                                               |
+                                               v
+                                  process_text_message(...)
+                                               |
+                         Artifact + Message done + Markdown
+                                               |
+                              ProcessingTask finalization
 ```
 
-The application exposes `/health` and `/ready`. When enabled, aiogram persists
-Telegram text input before acknowledging it. No queue or background worker is
-running.
+PostgreSQL is the durable orchestration authority. Redis carries actor
+messages only; it stores no result or authoritative task state. Delivery is at
+least once, and duplicate delivery is expected.
 
-## Manual artifact-processing boundary
+## Artifact-processing boundary
 
-Task 006 adds an independently invoked processing path:
+The worker and the supported manual CLI both reuse the Task 006 boundary:
 
 ```text
-developer CLI
+worker or developer CLI
     |
     v
 process_text_message(...)
@@ -36,9 +49,9 @@ process_text_message(...)
     +--> set Message status to done
 ```
 
-The command runs in the application environment but does not start FastAPI,
-Telegram polling, or a worker. A future worker may reuse the processing
-function; Task 006 does not select or enqueue messages automatically.
+The worker calls this function with a fresh session after committing its task
+claim. The function remains responsible for its own transaction, Message lock,
+filesystem reconciliation, Artifact row, and `Message.status = "done"`.
 
 PostgreSQL and the filesystem do not share a transaction. Recovery is by
 deterministic reconciliation: an exact file without a row is retained and can
@@ -54,17 +67,20 @@ Current responsibilities:
 
 * expose liveness and database-readiness endpoints;
 * run optional single-process Telegram long polling;
-* validate and persist Telegram text messages;
-* provide the manual one-message artifact CLI and reusable processing code.
+* atomically persist Telegram text Messages and pending ProcessingTasks;
+* run one optional dispatcher loop independently of Telegram polling;
+* recover expired queued and running leases and publish due task UUIDs.
 
-Telegram acknowledgement remains persistence-only. The Telegram handler does
-not invoke artifact processing.
+The handler does not contact Redis. Telegram acknowledgement means durable
+PostgreSQL capture, not processing success. Redis failure does not prevent app
+startup, ingestion, `/health`, or database-only `/ready`.
 
 ### PostgreSQL
 
-PostgreSQL stores users, messages, and Artifact metadata. Row locking and
-uniqueness constraints serialize and protect same-message note processing.
-Markdown files remain the readable knowledge output.
+PostgreSQL stores users, messages, ProcessingTasks, and Artifact metadata.
+ProcessingTask owns pending, queued, running, retrying, succeeded, and failed
+state, attempts, availability, leases, and errors. Conditional updates and row
+locking prevent stale dispatchers and workers from overwriting newer state.
 
 ### Knowledge base
 
@@ -81,10 +97,16 @@ Git commits are not automated.
 
 ### Worker and Redis
 
-A separate Dramatiq worker and Redis broker remain planned architecture, not
-implemented behavior. Their future task must define queue semantics, retries,
-crash recovery, and status transitions without changing the deterministic
-processing contract accidentally.
+One Dramatiq worker process with one thread receives only a canonical
+ProcessingTask UUID. It claims the row in PostgreSQL, commits a running lease,
+calls the unchanged idempotent Task 006 function with a fresh session, and
+conditionally finalizes the claimed attempt. Dramatiq automatic retries and a
+Redis result backend are disabled.
+
+Queued leases recover broker loss by returning work to pending. Expired running
+leases become retrying with fixed backoff or failed at the attempt limit. A
+crash after artifact commit is safe because the later attempt reconciles the
+same deterministic Artifact and file.
 
 ## Design principles
 
@@ -93,16 +115,12 @@ processing contract accidentally.
 3. Render durable Markdown bytes deterministically in application code.
 4. Make cross-resource recovery explicit rather than pretending PostgreSQL and
    the filesystem are one transaction.
-5. Keep AI, multimodal processing, Git writing, and queue orchestration outside
-   the current manual slice.
+5. Keep Redis as replaceable delivery transport and PostgreSQL as task truth.
 
 ## Postponed architecture
 
 Not implemented:
 
-* automatic message processing;
-* Redis or Dramatiq;
-* an active worker process;
 * AI generation;
 * voice, image, link, file, or PDF processing;
 * Git commits or synchronization;

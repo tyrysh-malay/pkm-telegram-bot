@@ -4,7 +4,8 @@ A small Python backend for turning Telegram inputs into Git-backed Markdown know
 
 The current foundation includes a FastAPI app, Telegram text persistence,
 deterministic Markdown note generation, Artifact persistence, Alembic
-migrations, Docker Compose, and tests.
+migrations, durable PostgreSQL-backed processing, Redis/Dramatiq delivery,
+Docker Compose, and tests.
 
 ## Requirements
 
@@ -59,7 +60,10 @@ docker compose up -d --build
 
 The app listens on `http://localhost:8000`.
 
-PostgreSQL is started by Compose with safe development defaults. The app waits for the database health check before starting.
+PostgreSQL and Redis are started by Compose with safe development defaults.
+Compose also starts one Dramatiq worker process with one thread. The app waits
+for PostgreSQL but does not wait for Redis, so broker downtime does not block
+FastAPI startup or Telegram persistence.
 
 Apply database migrations:
 
@@ -67,8 +71,8 @@ Apply database migrations:
 docker compose exec app alembic upgrade head
 ```
 
-The Compose app bind-mounts `./knowledge-base` at `/app/knowledge-base`, so
-notes generated with the default configuration remain visible on the host.
+The app and worker share the same image and bind-mount `./knowledge-base` at
+`/app/knowledge-base`, so generated notes remain visible on the host.
 
 Run tests inside the development container:
 
@@ -97,7 +101,8 @@ python3 scripts/project_context.py
 The command is read-only. To save a handoff outside the repository:
 
 ```bash
-python3 scripts/project_context.py > /tmp/pkm-project-context.md
+mkdir -p "$HOME/pkm-handoffs"
+python3 scripts/project_context.py > "$HOME/pkm-handoffs/pkm-project-context.md"
 ```
 
 Use the compact report for orientation and metadata handoff. For review of an
@@ -106,8 +111,8 @@ uncommitted task implementation, generate the full implementation-review bundle:
 ```bash
 python3 scripts/review_bundle.py \
   --task tasks/<active-task>.md \
-  --report /tmp/<task>-handoff.md \
-  > /tmp/<task>-review-bundle.md
+  --report "$HOME/pkm-handoffs/<task>-handoff.md" \
+  > "$HOME/pkm-handoffs/<task>-review-bundle.md"
 ```
 
 The completion report and redirected bundle should normally stay outside the
@@ -137,10 +142,27 @@ docker compose logs -f app
 
 Polling mode expects exactly one app process. Do not run multiple Uvicorn workers while polling is enabled.
 
-## Manual Markdown processing
+## Background Markdown processing
 
-Artifact processing is currently explicit, not automatic. After migrations are
-current, process one already persisted text message by application UUID:
+New Telegram text Messages are committed atomically with a pending
+`generate_note` ProcessingTask. The app dispatcher publishes task UUIDs to
+Redis, and the worker reloads and claims PostgreSQL state before calling the
+deterministic processor. PostgreSQL owns attempts, fixed retry backoff, leases,
+and terminal state; Redis is delivery transport only.
+
+Inspect current state with the existing database conventions, for example:
+
+```bash
+docker compose exec postgres psql -U pkm -d pkm \
+  -c 'select id, message_id, status, attempts, max_attempts, available_at, lease_expires_at from processing_tasks order by created_at;'
+```
+
+Redis downtime leaves tasks pending or queued for lease recovery and does not
+block ingestion. `/health` remains process liveness and `/ready` remains
+database-only readiness.
+
+The manual Task 006 command remains available for existing Messages without a
+ProcessingTask. After migrations are current, process one Message UUID with:
 
 ```bash
 docker compose exec app \
@@ -159,8 +181,9 @@ its Artifact row, then marks the Message `done`. Repeating it returns the same
 Artifact. It does not contact Telegram, start polling, enqueue work, or commit
 the note to Git.
 
-Telegram's `Saved for processing.` acknowledgement still means only that the
-raw message was persisted. The Telegram handler does not invoke this command.
+Telegram's `Saved for processing.` acknowledgement means that the Message and
+task were durably persisted, not that processing completed. There is no
+worker-to-Telegram completion notification, AI processing, or Git automation.
 See `docs/MARKDOWN_ARTIFACTS.md` for rendering and recovery behavior.
 
 ## Environment variables
@@ -174,8 +197,9 @@ The app uses:
 * `TELEGRAM_BOT_ENABLED`
 * `TELEGRAM_BOT_TOKEN`
 * `KNOWLEDGE_BASE_PATH` (defaults to `knowledge-base`)
+* `REDIS_URL` (defaults to `redis://redis:6379/0`)
+* `TASK_DISPATCHER_ENABLED` (defaults to `false`; Compose enables it for app)
 
-The following variables are documented for later milestones and can remain empty for now:
+The following variable is documented for later milestones and can remain empty:
 
 * `OPENAI_API_KEY`
-* `REDIS_URL`

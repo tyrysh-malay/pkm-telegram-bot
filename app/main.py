@@ -8,6 +8,7 @@ from fastapi import HTTPException
 from app.bot.runtime import TelegramPollingRuntime
 from app.db.session import check_database_ready
 from app.settings import get_settings
+from app.worker.dispatcher import TaskDispatcherRuntime
 
 
 logger = logging.getLogger(__name__)
@@ -17,12 +18,16 @@ settings = get_settings()
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     telegram_runtime = TelegramPollingRuntime.from_settings(settings)
+    task_dispatcher_runtime = TaskDispatcherRuntime.from_settings(settings)
     app.state.telegram_runtime = telegram_runtime
+    app.state.task_dispatcher_runtime = task_dispatcher_runtime
 
     await telegram_runtime.start()
+    await task_dispatcher_runtime.start()
     try:
         yield
     finally:
+        await task_dispatcher_runtime.stop()
         await telegram_runtime.stop()
 
 

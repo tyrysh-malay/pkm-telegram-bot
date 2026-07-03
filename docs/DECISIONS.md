@@ -927,6 +927,55 @@ compensating deletion.
 
 ---
 
+## D-026 — Keep durable task orchestration in PostgreSQL
+
+**Decision**
+
+Atomically persist one `generate_note` ProcessingTask with each new Telegram
+text Message. PostgreSQL owns task status, attempts, availability, leases,
+retry backoff, and terminal outcomes. Redis and Dramatiq provide at-least-once
+delivery only.
+
+Run the dispatcher inside the app process and one generic Dramatiq actor in a
+separate one-process, one-thread worker. The actor payload contains only the
+ProcessingTask UUID. Disable Dramatiq automatic retries and Redis result
+storage; the worker reloads and locks PostgreSQL state for every claim.
+
+Keep Task 006 unchanged as the deterministic, idempotent artifact boundary.
+Recover lost queued delivery and worker crashes through expiring PostgreSQL
+leases and Task 006 reconciliation. App startup, Telegram ingestion,
+`/health`, and database-only `/ready` do not depend on Redis availability.
+
+**Context or problem**
+
+Manual processing did not automatically advance newly ingested Messages, and
+publishing directly from the Telegram transaction would either couple capture
+to Redis or lose work when broker publication failed.
+
+**Reasoning**
+
+The task row acts as both durable scheduling record and orchestration state,
+so Redis can be restarted or lose messages without losing work. Conditional
+queued/final updates plus attempt-number ownership tolerate fast workers,
+duplicate delivery, and late finalizers without an additional outbox or event
+table.
+
+**Consequences**
+
+* Telegram acknowledgement confirms atomic Message/task capture only.
+* Delivery is at least once rather than exactly once.
+* Attempts count worker claims, not broker publications.
+* Queued and running work is recoverable after fixed lease expiry.
+* Existing Messages are not backfilled automatically.
+* ProcessingEvent, heartbeats, multiple queues/workers, admin retry tools, AI,
+  notifications, and Git automation remain postponed.
+
+**Status:** accepted
+
+**Related task:** Task 007
+
+---
+
 # Possible future ADR split
 
 If this file becomes too large, the following decisions are good candidates for individual ADR files:

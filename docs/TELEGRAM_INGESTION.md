@@ -4,7 +4,8 @@
 
 The first Telegram milestone receives plain text messages and persists them reliably in PostgreSQL.
 
-This milestone does not process the message into a knowledge artifact. It only captures the input and acknowledges receipt.
+Newly captured text is scheduled durably for background note generation. The
+acknowledgement still confirms capture only, not processing completion.
 
 ## Supported behavior
 
@@ -24,9 +25,7 @@ The bot does not yet support:
 * links as a separate input type;
 * documents;
 * commands other than `/start`;
-* background processing;
 * AI calls;
-* Markdown generation.
 
 A message containing a URL is still stored as a normal text message in this milestone.
 
@@ -40,6 +39,7 @@ The existing FastAPI process remains responsible for:
 * `/ready`;
 * application startup and shutdown;
 * starting and stopping the Telegram polling task.
+* running the task dispatcher independently of Telegram polling.
 
 The application should continue to start when Telegram polling is disabled.
 
@@ -84,8 +84,9 @@ For an ordinary text message:
 2. create the user if they do not exist;
 3. update mutable Telegram profile fields when the user already exists;
 4. build an idempotency key;
-5. persist the message;
-6. send an acknowledgement.
+5. persist the message and one pending `generate_note` ProcessingTask in the
+   same transaction;
+6. send an acknowledgement after commit.
 
 Persisted message values:
 
@@ -131,21 +132,30 @@ Idempotency key format:
 telegram:<chat_id>:<message_id>
 ```
 
-The database uniqueness constraint is the final protection against duplicates.
+The Message idempotency constraint and
+`UNIQUE(processing_tasks.message_id, task_type)` are the final protection
+against duplicate Messages and tasks.
 
 The implementation should handle a uniqueness conflict safely instead of crashing the polling loop.
 
-The minimum acceptance requirement is:
+Repeated delivery produces:
 
 ```text
-processing the same Telegram message twice creates exactly one Message row
+exactly one Message
+exactly one generate_note ProcessingTask
 ```
+
+A duplicate delivery of a Message that predates ProcessingTask support does not
+create a task; existing Messages are not implicitly backfilled.
 
 ## Transaction boundary
 
-User upsert and message insertion should occur within a clear database transaction.
+User upsert, Message insertion, and ProcessingTask insertion occur in one
+database transaction. Only the transaction that inserts a new Message creates
+the task.
 
-A failed database write must not produce a success acknowledgement.
+A failed task insert rolls back the Message. A failed database write does not
+produce a success acknowledgement.
 
 Avoid committing partial state where practical.
 
@@ -157,9 +167,15 @@ For a newly persisted message, respond with a short temporary acknowledgement:
 Saved for processing.
 ```
 
-This text may change when background processing is added.
+The acknowledgement is sent only after PostgreSQL commit. It does not mean the
+worker has generated a note or that processing succeeded.
 
-For a duplicate delivery, the bot must not create another database row. Sending another acknowledgement is acceptable for this milestone, although avoiding duplicate replies is preferable if it stays simple.
+Duplicate delivery keeps the same acknowledgement behavior without creating
+another Message or ProcessingTask.
+
+The ingestion transaction and handler never contact Redis or invoke the worker.
+Redis downtime therefore does not block persistence or acknowledgement; the
+pending PostgreSQL task is dispatched after transport recovers.
 
 ## Error handling
 
@@ -179,7 +195,9 @@ Requirements:
 * do not persist fake success states;
 * keep the polling loop alive when a single update fails.
 
-Retry policies and dead-letter handling belong to later worker milestones.
+Processing attempts, fixed retry backoff, and lease recovery are owned by the
+ProcessingTask state machine. Telegram completion/failure notifications remain
+postponed.
 
 ## Security postponed
 
@@ -202,6 +220,9 @@ Tests should verify:
 * a text message is persisted correctly;
 * the idempotency key has the expected format;
 * processing the same message twice creates one row;
+* each new Message is atomic with one pending task;
+* duplicates and concurrent duplicates create one task;
+* a legacy duplicate is not backfilled;
 * `/start` returns the expected response;
 * text ingestion sends an acknowledgement after successful persistence;
 * Telegram polling is not started when disabled.

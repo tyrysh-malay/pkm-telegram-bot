@@ -6,6 +6,7 @@ from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert
 
 from app.db.models import Message
+from app.db.models import ProcessingTask
 from app.db.models import User
 from app.db.session import get_session_factory
 
@@ -75,6 +76,9 @@ async def persist_text_message(
                 ).returning(Message.id)
             )
             message_id = message_result.scalar_one_or_none()
+            if message_id is not None:
+                session.add(ProcessingTask(message_id=message_id))
+                await session.flush()
 
     if message_id is None:
         logger.info(

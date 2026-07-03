@@ -1,0 +1,28 @@
+from datetime import timedelta
+
+
+DISPATCH_POLL_INTERVAL_SECONDS = 1
+DISPATCH_BATCH_SIZE = 25
+BROKER_FAILURE_RETRY_SECONDS = 5
+QUEUED_LEASE_DURATION = timedelta(seconds=30)
+RUNNING_LEASE_DURATION = timedelta(seconds=300)
+PROCESSING_RETRY_BACKOFF = timedelta(seconds=5)
+MAX_STORED_ERROR_LENGTH = 500
+
+TASK_TYPE_GENERATE_NOTE = "generate_note"
+TASK_STATUS_PENDING = "pending"
+TASK_STATUS_QUEUED = "queued"
+TASK_STATUS_RUNNING = "running"
+TASK_STATUS_RETRYING = "retrying"
+TASK_STATUS_SUCCEEDED = "succeeded"
+TASK_STATUS_FAILED = "failed"
+
+DISPATCHABLE_STATUSES = (TASK_STATUS_PENDING, TASK_STATUS_RETRYING)
+TERMINAL_STATUSES = (TASK_STATUS_SUCCEEDED, TASK_STATUS_FAILED)
+
+WORKER_LEASE_EXPIRED_ERROR = "worker lease expired; retry scheduled"
+MAX_ATTEMPTS_LEASE_EXPIRED_ERROR = (
+    "maximum attempts reached after worker lease expired"
+)
+MAX_ATTEMPTS_ERROR = "maximum processing attempts reached"
+UNSUPPORTED_TASK_TYPE_ERROR = "unsupported processing task type"
