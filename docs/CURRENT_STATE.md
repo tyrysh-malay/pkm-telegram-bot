@@ -16,8 +16,11 @@ Confirmed working:
 * Inside the app container, `GET /ready` returns `200 OK`.
 * Alembic migrations initialize the test database during pytest.
 * Telegram text ingestion is implemented through aiogram long polling, user
-  persistence, atomic Message/ProcessingTask persistence, and duplicate
-  protection.
+  sender-ID authorization, private-chat enforcement, user persistence, atomic
+  Message/ProcessingTask persistence, and duplicate protection.
+* One shared aiogram message-routing filter silently rejects missing senders,
+  unknown senders, and non-private chats before handler response or database
+  work. The immutable allowlist is loaded from startup configuration.
 * The app-process dispatcher publishes due ProcessingTask UUIDs through Redis.
 * One Dramatiq worker process/thread claims PostgreSQL tasks, invokes Task 006,
   and conditionally finalizes attempts.
@@ -42,6 +45,7 @@ The automatic data flow is:
 
 ```text
 Telegram text
+→ private chat + configured sender-ID authorization
 → Message + pending ProcessingTask committed atomically
 → app dispatcher → Redis → worker PostgreSQL claim
 → unchanged deterministic Task 006 processing
@@ -54,6 +58,8 @@ Not implemented:
 AI processing
 Git-backed artifact commit
 Telegram webhook ingestion
+runtime allowlist administration
+group, supergroup, or channel ingestion
 ```
 
 ## Repository workflow and review reporting
@@ -138,10 +144,17 @@ The development image includes Git and copies the complete `scripts/` and
 `tests/` directories. Repository-aware commands still require execution in a
 Git work tree; `.git` is intentionally absent from the image build context.
 
-Task 007 focused orchestration suites passed 39 tests, and 77 focused Task 006,
-Telegram, model, health, and database regressions passed unchanged. The full
-suite passed 181 tests. Development counts and stable IDs remained unchanged at
-`users=1`, `messages=1`, `artifacts=0`, and `processing_tasks=0`.
+Task 008 authorization and ingestion coverage passed 44 focused tests, and 91
+focused Task 006/007 processing regressions passed unchanged. The full suite
+passed 219 tests. Development counts and stable identity hashes remained
+unchanged at `users=1`, `messages=1`, `artifacts=0`, and
+`processing_tasks=0`.
+
+Disabled Telegram configuration accepts an empty allowlist; enabled
+configuration rejects an empty allowlist and accepts a valid non-empty JSON
+array without contacting Telegram. A disposable authorized private-message
+smoke reached one succeeded ProcessingTask, one done Message, one Artifact, and
+an exact deterministic note, then removed all of its rows and file.
 
 Migration `0003` downgraded to `0002` and re-upgraded in the isolated test
 database while preserving User, Message, Artifact, and Message status state.
@@ -167,7 +180,8 @@ cross-event-loop pooled connections.
 * No Git-backed artifact commits.
 * No webhook ingestion.
 * Long polling assumes a single app process when enabled.
-* No confirmed user allowlist.
+* Telegram owner changes require an app restart; no database-backed permission
+  model or runtime allowlist command exists.
 * No worker-to-Telegram completion or failure notification.
 * Existing Messages are not automatically backfilled with ProcessingTasks.
 * Retry timing and leases use fixed first-version constants without heartbeat

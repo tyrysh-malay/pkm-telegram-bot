@@ -13,7 +13,6 @@ START_TEXT = "Send me a text note and I will save it for processing."
 ACK_TEXT = "Saved for processing."
 
 logger = logging.getLogger(__name__)
-router = Router()
 
 
 def build_text_input(message: AiogramMessage) -> TelegramTextInput:
@@ -33,12 +32,10 @@ def build_text_input(message: AiogramMessage) -> TelegramTextInput:
     )
 
 
-@router.message(CommandStart())
 async def handle_start(message: AiogramMessage) -> None:
     await message.answer(START_TEXT)
 
 
-@router.message(F.text, ~F.text.startswith("/"))
 async def handle_text_message(message: AiogramMessage) -> None:
     try:
         telegram_input = build_text_input(message)
@@ -61,3 +58,10 @@ async def handle_text_message(message: AiogramMessage) -> None:
             message.chat.id,
             message.message_id,
         )
+
+
+def build_handlers_router() -> Router:
+    router = Router()
+    router.message.register(handle_start, CommandStart())
+    router.message.register(handle_text_message, F.text, ~F.text.startswith("/"))
+    return router

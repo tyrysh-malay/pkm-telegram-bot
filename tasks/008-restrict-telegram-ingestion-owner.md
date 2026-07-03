@@ -1,6 +1,6 @@
 # Task 008: Restrict Telegram ingestion to the configured personal owner
 
-**Status:** planned
+**Status:** completed
 **Depends on:** Tasks 000–007
 **Target file:** `tasks/008-restrict-telegram-ingestion-owner.md`
 **Expected commit boundary:** one reviewable implementation commit containing the minimal Telegram-owner configuration, early authorization boundary, focused tests, and verified documentation changes required by this task; the accepted task specification must be committed before implementation, and Codex must not commit implementation changes unless explicitly instructed
@@ -2071,3 +2071,21 @@ feat: restrict Telegram ingestion to configured owners
 ```
 
 Codex must not create the implementation commit unless explicitly instructed.
+
+## Completion evidence
+
+Implemented and verified on 2026-07-03 without changing the accepted contract.
+Enabled Telegram polling now requires a strict, non-empty JSON sender-ID
+allowlist, and one Dispatcher-level message root filter permits only configured
+senders in private chats before `/start`, text ingestion, response, or state
+mutation.
+
+Focused authorization and ingestion coverage passed 44 tests; focused Task
+006/007 regressions passed 91 tests; and the complete suite passed 219 tests.
+Configuration smokes, resolved Compose topology, migration head, health and
+readiness, development-data isolation, exact-byte authorized end-to-end
+processing, cleanup, and repository knowledge-base cleanliness were verified.
+The normal Compose BuildKit rebuild encountered local DNS failure, so the same
+Dockerfile was built successfully with host networking before the four-service
+Compose runtime was recreated; the repository configuration was not changed.
+Full evidence is in the repository-external Task 008 handoff and review bundle.

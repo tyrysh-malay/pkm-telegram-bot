@@ -131,7 +131,15 @@ To run the bot locally, create a real token with BotFather and set these values 
 ```text
 TELEGRAM_BOT_ENABLED=true
 TELEGRAM_BOT_TOKEN=<local secret>
+TELEGRAM_ALLOWED_USER_IDS=[123456789]
 ```
+
+`TELEGRAM_ALLOWED_USER_IDS` is one JSON array of positive numeric Telegram
+sender user IDs. It authorizes `from_user.id`, not chat IDs, usernames, or
+profile names. Enabled polling requires at least one ID, and the bot accepts
+commands and text only from allowlisted senders in private chats. Unknown,
+missing-sender, group, supergroup, and channel updates are silently ignored
+before any response or database write.
 
 Then recreate the app container:
 
@@ -141,6 +149,9 @@ docker compose logs -f app
 ```
 
 Polling mode expects exactly one app process. Do not run multiple Uvicorn workers while polling is enabled.
+Allowlist changes are loaded only at startup, so recreate or restart the app
+after changing the value. There is no runtime owner-management command or
+database-backed permission model.
 
 ## Background Markdown processing
 
@@ -160,6 +171,10 @@ docker compose exec postgres psql -U pkm -d pkm \
 Redis downtime leaves tasks pending or queued for lease recovery and does not
 block ingestion. `/health` remains process liveness and `/ready` remains
 database-only readiness.
+
+The worker processes tasks that are already durable in PostgreSQL without
+rechecking the Telegram allowlist. Removing an owner therefore blocks new
+updates after app restart but does not cancel existing tasks.
 
 The manual Task 006 command remains available for existing Messages without a
 ProcessingTask. After migrations are current, process one Message UUID with:
@@ -196,6 +211,7 @@ The app uses:
 * `TEST_DATABASE_URL`
 * `TELEGRAM_BOT_ENABLED`
 * `TELEGRAM_BOT_TOKEN`
+* `TELEGRAM_ALLOWED_USER_IDS` (JSON array; required and non-empty when polling is enabled)
 * `KNOWLEDGE_BASE_PATH` (defaults to `knowledge-base`)
 * `REDIS_URL` (defaults to `redis://redis:6379/0`)
 * `TASK_DISPATCHER_ENABLED` (defaults to `false`; Compose enables it for app)
