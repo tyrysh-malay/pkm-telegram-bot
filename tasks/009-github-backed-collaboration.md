@@ -1,6 +1,6 @@
 # Task 009: Migrate project collaboration to GitHub-backed pull-request reviews
 
-**Status:** planned
+**Status:** completed
 **Depends on:** Tasks 000–008
 **Target file:** `tasks/009-github-backed-collaboration.md`
 **Expected branch:** `task/009-github-backed-collaboration`
@@ -2642,3 +2642,47 @@ repository-setting changes
 ```
 
 The final Task 009 outcome is a reviewed, unmerged PR awaiting separate user authorization.
+
+## Amendment — public-repository pilot access gate
+
+Accepted by the user on 2026-07-03 after connected Web Chat inspected repository
+`tyrysh-malay/pkm-telegram-bot`, draft PR #1, the task file at exact contract
+commit `b42ac731bffc96ed1f1df53485a87a2509f85969`, the contract commit list, both
+changed-file patches, and the matching current PR head.
+
+The repository was public at confirmation time. This proves the GitHub-backed
+review boundary for the explicitly accepted public-repository pilot but does
+not prove connector access while the repository is private. Private-repository
+connector access remains unverified and must be reported in the final PR
+description and completion evidence.
+
+This is an explicit transitional deviation from the private-repository access
+criteria. It authorizes Task 009 implementation to proceed under the public
+pilot boundary. It does not alter the original contract SHA, authorize a direct
+push to `main`, authorize merge, or silently rewrite any other requirement.
+
+## Implementation evidence
+
+Implemented and verified on 2026-07-03 under the accepted public-repository
+pilot boundary.
+
+* Replaced active report/upload instructions with one authorized task branch,
+  one pull request, an exact contract SHA, and exact pushed-head review.
+* Added the PR template and future-task Git/PR authority fields; added D-028 and
+  marked D-023/D-024 superseded without deleting their historical content.
+* Removed the two obsolete reporting scripts and their focused tests. Removed
+  only their proven-dead development-image Git installation and script-copy
+  support; general ignore rules remained unchanged.
+* Preserved historical Tasks 004–008 and made no application, schema, queue,
+  Telegram, authorization, artifact, environment, or Compose-topology change.
+* Passed structural, active-reference, historical-preservation, scope, Compose
+  configuration, and diff checks. The current 154-test application suite passed
+  in the established development image with the current source and reduced
+  tests mounted read-only; in-container health and readiness returned `200`.
+* A normal fresh build stalled on the known Docker/VPN dependency-download path.
+  A host-network build fallback progressed further but timed out downloading
+  `uvloop`; completed fresh-image verification therefore remains outstanding.
+* Connected review was proven while the repository was public. Connector access
+  while private remains unverified. No CI was added, and no merge, default-branch
+  push, force-push, branch deletion, secret, generated note, or handoff artifact
+  is part of this implementation.

@@ -1,118 +1,185 @@
 # Repository Workflow
 
 This repository owns the project workflow. The live local repository is the
-authority for Codex; documentation describes it but cannot override contrary
-files, Git state, tests, or observed behavior.
+authority for Codex while editing; documentation describes it but cannot
+override contrary files, Git state, tests, or observed behavior.
 
-## Sources and snapshots
+## Sources of truth and visibility
 
-Keep these forms of context distinct:
+Keep these boundaries distinct:
 
-* **Committed repository state** is the history at `HEAD`.
-* **Uncommitted local state** is the staged, unstaged, and untracked work in one
-  local working tree. It is not represented by `HEAD` or a remote repository.
-* **Generated context reports** are point-in-time, read-only snapshots of safe
-  repository facts. They are handoff aids, not a source of truth.
-* **Uploaded Web Chat files** are snapshots and may be stale as soon as the
-  repository changes.
-* **Possible future GitHub context** would show only the committed, pushed
-  baseline. It would not show uncommitted local work.
+* **Local working tree:** authoritative to Codex for current editing and local
+  verification. Uncommitted changes are visible only to local tools and cannot
+  be reviewed through GitHub.
+* **Pushed default branch:** the accepted shared baseline. Normal task work is
+  not committed or pushed directly here.
+* **Pushed task branch and pull request:** the shared implementation-review
+  state. They contain committed and pushed work only.
+* **Task contract:** the task file at the exact full contract commit SHA
+  recorded in the pull-request description. A later task-file version at the
+  branch head does not replace it.
+* **Pull-request description:** Codex's implementation explanation and supplied
+  verification claims. These claims are not independently executed proof
+  unless a corresponding CI check exists.
 
-Web Chat must label confirmed facts, assumptions, proposals, and claims that
-still require live-repository verification. Codex must verify supplied context
-against the local repository before acting on it.
+GitHub never exposes local uncommitted state. If requested review evidence
+exists only locally, Codex must say so and must not describe it as reviewed.
+
+## Evidence precedence
+
+Review evidence has this order:
+
+1. the task file at the exact contract commit defines requirements;
+2. the pull-request base and exact pushed head define the comparison;
+3. pull-request commits and patch define pushed implementation state;
+4. the pull-request description explains the implementation and reports local
+   verification claims;
+5. available CI checks provide independently executed verification.
+
+Snapshots, summaries, comments, and separately supplied files are handoff aids,
+not independent sources of truth. Conflicting evidence requires inspection of
+the current repository and pull request.
 
 ## Task lifecycle
 
 1. **Discuss architecture.** Compare durable boundaries and record accepted
    decisions separately from tentative directions.
 2. **Plan one bounded task.** Define its goal, verified starting boundary,
-   scope, non-goals, failure behavior, tests, acceptance criteria, and exact
-   repository checks.
-3. **Commit the accepted task specification.** The committed specification is
-   the review contract and should normally precede implementation.
-4. **Inspect the live repository.** Codex reads Git state, the active task,
-   `CURRENT_STATE.md`, this workflow, referenced documents, relevant code,
-   tests, and configuration. Contradictions are reported before editing.
-5. **Implement the smallest useful change.** Avoid postponed behavior,
-   speculative abstractions, unrelated refactoring, and secret exposure.
-6. **Test and verify acceptance.** Run focused checks first, then every suite
+   branch, contract and implementation commits, Git authorization, PR boundary,
+   tests, acceptance criteria, correction behavior, and merge boundary.
+3. **Synchronize the default branch.** Fetch the verified remote and require a
+   clean local default branch with no ahead/behind difference.
+4. **Create one task branch.** Use the task's authorized branch from the pushed
+   default baseline and preserve unrelated local state.
+5. **Commit the accepted task contract.** The repository-owned task
+   specification precedes implementation and receives an exact full SHA.
+6. **Push and open a draft PR.** Record task path, contract SHA, base branch,
+   task branch, goal, and any required connected-access gate.
+7. **Inspect the live repository.** Read local and remote Git state, the exact
+   contract, current state, this workflow, referenced documents, relevant code,
+   tests, configuration, and PR metadata. Report contradictions before editing.
+8. **Implement locally.** Make the smallest useful change without postponed
+   functionality, speculative abstraction, or unrelated cleanup.
+9. **Test and verify acceptance.** Run focused checks first, then every suite
    and manual check required by the task.
-7. **Review against the specification.** The handoff review uses the diff,
-   command output, and completion report to evaluate the committed contract.
-8. **Correct and review again when needed.** Keep corrections bounded by the
-   same task. Material scope changes return to task planning.
-9. **Update documentation from verified behavior.** Remove stale semantic state
-   and record durable decisions only after verification supports them.
-10. **Reach the implementation commit boundary.** Confirm the diff contains
-    only the task outcome. Codex commits only when explicitly instructed.
-11. **Select the next task separately.** Completing a task does not invent or
-    activate its successor.
+10. **Update documentation from verified behavior.** Remove stale semantic
+    state and record durable decisions only after verification supports them.
+11. **Commit and push the implementation.** Use only an explicitly authorized
+    task-branch boundary. Never mix unrelated changes or push the default branch.
+12. **Complete the PR description.** Record exact commands and results,
+    documentation, risks, exclusions, contract SHA, base SHA, and current head.
+13. **Mark ready.** Do this only when the task authorizes it and implementation,
+    verification, documentation, description, scope, and branch cleanliness pass.
+14. **Review the exact PR head.** Handoff Review identifies the repository, PR,
+    contract SHA, base SHA, and exact pushed head SHA.
+15. **Apply bounded corrections.** Keep them on the same task branch, preserve
+    history, rerun relevant checks, push normally, and review the new exact head.
+16. **Obtain final approval.** Approval applies only to the identified head.
+17. **Merge only after separate authorization.** Use the task's accepted merge
+    method; readiness or approval alone never authorizes merge.
+18. **Select the next task separately.** Completion does not invent or activate
+    a successor.
 
 Task requirements must not be silently rewritten after implementation to match
-the code. Status or completion evidence may be appended without replacing the
-contract. A changed requirement needs an explicit amendment and reason;
-material scope changes require a new planning decision.
+the code. Status and concise evidence may be appended without replacing the
+contract. Material scope changes return to task planning.
+
+## Git and GitHub authority
+
+Each task must explicitly authorize the exact branch and each permitted action:
+branch creation, contract commit, push, draft PR creation, implementation
+commit, readiness transition, and correction commits. Without that authority,
+Codex stops at the relevant boundary.
+
+Codex must never, without separate explicit authorization:
+
+* push task work directly to the default branch;
+* merge a pull request;
+* force-push or silently rebase reviewed commits;
+* amend already pushed reviewed commits;
+* delete task branches;
+* change repository settings or protection rules;
+* commit secrets, local configuration, generated knowledge artifacts, database
+  dumps, credential-bearing URLs, or unrelated work.
+
+Fast-forwarding a clean local default branch to its remote counterpart is
+allowed when the task authorizes branch bootstrap. Normal accepted merges use a
+merge commit when the task specifies that policy, preserving contract and
+implementation commit identities.
+
+## Pull-request review boundary
+
+The PR must identify:
+
+```text
+repository
+PR number
+task path
+full contract commit SHA
+base branch and base SHA
+task branch and current head SHA
+commits and changed paths
+```
+
+The description must summarize outcome, exact verification commands and
+results, documentation, risks and unverified items, and review scope. It must
+state that reported verification is a Codex claim unless backed by an
+available CI check.
+
+When connected access is a task prerequisite, the gate passes only after the
+collaboration channel explicitly confirms repository and PR metadata, the task
+at the contract SHA, commit list, changed files or patch, and current head SHA.
+Record visibility limitations honestly. A successful local push or CLI query is
+not evidence that another review surface has access.
+
+After any pushed correction, the old review result applies only to the earlier
+head. Update the description when evidence changes and require review of the new
+head. Do not force-push to make the head appear unchanged.
 
 ## Conversation responsibilities
 
-### Architecture chat
+### Architecture Planning
 
-Responsible for durable boundaries, architectural alternatives, candidates for
-`DECISIONS.md` or `ARCHITECTURE.md`, and separating accepted decisions from
-tentative directions.
+Responsible for durable architecture, meaningful alternatives, accepted
+boundaries, and escalation of material scope changes. It does not implement or
+review PR patches line by line.
 
-It does not implement code, review an uncommitted implementation line by line,
-silently redefine an active task, or present future ideas as current behavior.
+### Active Task Planning
 
-### Active Task Planning chat
-
-Responsible for one bounded task: narrowing scope, writing acceptance criteria,
-defining non-goals and failure modes, identifying repository checks, and
-producing a precise Codex handoff.
-
-It does not combine unrelated milestones, rewrite architecture without
-escalation, review implementation before evidence exists, or change completed
-requirements to conceal an implementation mismatch.
+Responsible for one bounded task: branch name, contract boundary, commit and
+push authorization, PR boundary, tests, acceptance criteria, correction
+behavior, and merge boundary. It does not implement, merge, or silently broaden
+the task.
 
 ### Codex
 
-Responsible for inspecting live Git and repository state, reading required
-documents, presenting a plan before editing, making the smallest in-scope
-change, maintaining tests, running acceptance checks, updating affected docs
-after verification, and reporting files, commands, results, limitations, and
-final Git status.
+Responsible for local and remote inspection, authorized task-branch and PR
+bootstrap, local implementation, verification, documentation, coherent
+authorized commits, pushing only the task branch, PR-description updates, and
+preserving unrelated state.
 
-Codex does not trust stale documentation over the working tree, implement
-postponed functionality, add speculative abstractions, expose secrets, or
-commit without explicit instruction.
+Codex does not push the default branch, merge without separate authorization,
+expose secrets, or claim GitHub contains local uncommitted work.
 
-### Handoff Review chat
+### Handoff Review
 
-Responsible for reviewing the supplied diff, command evidence, and completion
-report against the accepted specification; finding missed criteria,
-regressions, scope expansion, and documentation mismatches; defining bounded
-corrections; and confirming readiness for the commit boundary.
+Responsible for reviewing the exact contract commit and task path, PR base and
+head SHAs, commits, complete patch, description, and available checks. It cannot
+review uncommitted local changes and must identify the exact head SHA reviewed.
 
-It does not invent unsupplied repository facts, broaden the active task without
-returning to planning, or rewrite requirements to hide a mismatch.
-
-### Future Scope chat
+### Future Scope
 
 Responsible for collecting product ideas, exploring later workflows and
-features, comparing alternatives, and identifying future architecture or
-planning questions.
-
-It does not add ideas to the active task, describe tentative features as
-implemented, introduce current dependencies or behavior, or record a durable
-decision without the architecture process.
+features, and identifying future planning questions. It does not add ideas to
+the active task, describe tentative features as implemented, or record a
+durable decision without the architecture process.
 
 ## Documentation update rules
 
 ### `docs/CURRENT_STATE.md`
 
-Update after an implemented and verified task changes the current semantic
-state. Describe what works, what does not, operational boundaries, and one
+Update after an implemented and verified task changes current semantic state.
+Describe what works, what does not, and operational boundaries. Maintain one
 stable field:
 
 ```text
@@ -125,48 +192,42 @@ or:
 **Active task:** none selected
 ```
 
-Replace stale state instead of accumulating task history. This is not a
-changelog. Do not manually maintain branch, HEAD, recent commits, or working
-tree status, and do not claim unverified behavior.
+Replace stale state instead of accumulating task history. Do not maintain
+branch, commit, PR, or working-tree chronology here.
 
 ### `docs/DECISIONS.md`
 
 Update only for accepted durable architectural or development choices that
 constrain later tasks or explain a meaningful alternative. Do not record every
-file change, test output, temporary detail, or routine completion note. Mark
-tentative and unresolved choices honestly.
+file change, test result, or temporary detail.
 
 ### `docs/ARCHITECTURE.md`
 
 Update when verified behavior changes process or service boundaries,
 responsibility ownership, major data flow, runtime topology, integration
-boundaries, or cross-component failure and recovery. Do not update it for a
-routine internal refactor.
+boundaries, or cross-component failure and recovery.
 
 ### `docs/DATA_MODEL.md`
 
 Update when entities, fields, constraints, relationships, statuses,
-state-transition meaning, or persistence ownership change. Test fixtures and
-implementation-only query changes do not belong here.
+state-transition meaning, or persistence ownership change.
 
 ### Domain documents
 
-Update a domain document such as `docs/TELEGRAM_INGESTION.md` when verified
-domain behavior changes: supported inputs, visible responses, idempotency,
-transaction boundaries, runtime mode, or domain failure handling. Do not
-update it for unrelated workflow or tooling work.
+Update a domain document when verified behavior changes supported inputs,
+visible responses, idempotency, transaction boundaries, runtime mode, or domain
+failure handling. Do not update it for unrelated workflow work.
 
 ### `docs/PROJECT_BRIEF.md`
 
-This is the canonical project brief. Update it only when the accepted product
-definition, MVP boundary, product value, or a major non-goal changes—not for
-routine progress.
+Update only when the accepted product definition, MVP boundary, product value,
+or a major non-goal changes.
 
 ### `README.md`
 
 Update when developers or users need new setup, migration, test,
-configuration, supported utility, or visible behavior instructions. Link to
-this document instead of duplicating the workflow.
+configuration, contributor workflow, supported utility, or visible behavior
+instructions. Link to this workflow instead of duplicating it.
 
 ### `.env.example`
 
@@ -175,62 +236,7 @@ placeholders and safe examples only.
 
 ### Task files
 
-Normally commit an accepted task specification before implementation. Its
-requirements, scope, non-goals, and criteria are the review contract. Status
-and completion evidence may be added later, but requirements are not silently
-rewritten. Record amendments with reasons and return material changes to task
-planning. Keep specification and implementation commits distinguishable where
-practical.
-
-## Context and implementation-review reports
-
-Use the compact project-context report for orientation, planning handoff, and
-metadata checks that do not require implementation contents:
-
-From the repository root, run:
-
-```bash
-python3 scripts/project_context.py
-```
-
-The command prints Markdown to standard output. It uses only explicit read-only
-Git queries and whitelisted task/document metadata. It does not read diffs,
-secrets, environment variables, databases, or Telegram content, and it writes
-nothing. A dirty working tree and detached HEAD are valid report states; failure
-to establish Git context exits non-zero rather than printing a partial report.
-
-To hand off a snapshot without modifying the repository:
-
-```bash
-python3 scripts/project_context.py > /tmp/pkm-project-context.md
-```
-
-Always label the generated file as point-in-time context and re-run it when the
-repository changes.
-
-Implementation review requires the separate full bundle. After implementation,
-verification, and documentation updates, Codex writes the task's explicit
-completion report outside the repository, normally under `/tmp`, then runs:
-
-```bash
-python3 scripts/review_bundle.py \
-  --task tasks/<active-task>.md \
-  --report /tmp/<task>-handoff.md \
-  > /tmp/<task>-review-bundle.md
-```
-
-The committed task specification is the review contract. Captured Git status,
-the tracked diff, and complete safe untracked-file contents are the
-implementation state. The completion report supplies Codex's explanations and
-verification claims; bundle generation does not independently execute or
-validate those claims.
-
-The bundle command is read-only and emits Markdown only after complete evidence
-passes its ignored-path, secret, text, file-type, size, and consistency checks.
-It includes neither ignored files nor partial or truncated substitutes for
-rejected evidence.
-
-Regenerate the bundle after any implementation, documentation, task, or
-completion-report change. Separately uploaded files must not silently override
-or be combined with conflicting bundle evidence; a conflict requires a fresh
-bundle from the current repository and report.
+Commit the accepted specification before implementation. Its requirements,
+scope, non-goals, and criteria are the review contract. Later changes may set
+status, append concise completion evidence, or record an explicit amendment and
+reason; they must not silently replace accepted requirements.
