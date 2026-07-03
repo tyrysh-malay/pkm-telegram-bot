@@ -4,7 +4,7 @@ This document describes the current semantic state of the repository. Generated
 context reports and Git commands provide branch, commit, recent-commit, and
 working-tree facts.
 
-**Active task:** none selected
+**Active task:** `tasks/009-github-backed-collaboration.md`
 
 ## Working functionality
 
