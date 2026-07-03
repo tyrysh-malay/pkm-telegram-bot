@@ -1,6 +1,6 @@
 # Task 007: Add durable background processing for Telegram text messages
 
-**Status:** planned  
+**Status:** completed
 **Depends on:** Tasks 000–006  
 **Target file:** `tasks/007-durable-background-processing.md`  
 **Expected commit boundary:** one reviewable implementation commit containing the minimal ProcessingTask persistence, Telegram-ingestion integration, app-process dispatcher, Dramatiq actor, Redis and worker runtime configuration, tests, migration, and verified documentation changes required by this task; the accepted task specification must be committed before implementation, and Codex must not commit implementation changes unless explicitly instructed
@@ -1984,3 +1984,19 @@ feat: add durable background processing
 ```
 
 Codex must not create the implementation commit unless explicitly instructed.
+
+## Completion evidence
+
+Implemented and verified on 2026-07-03 without changing the accepted contract.
+Migration `0003` adds ProcessingTask durability; Telegram ingestion creates the
+task atomically; the app dispatcher and one-process/one-thread Dramatiq worker
+use PostgreSQL-owned leases and retries while reusing Task 006 unchanged.
+
+Focused Task 007 tests passed 39 cases, focused Task 006/Telegram/database
+regressions passed 77 cases, and the complete suite passed 181 cases. The
+isolated migration cycle, Redis-unavailable app check, four-service Compose
+topology, and disposable exact-byte end-to-end smoke all passed. Development
+database identities/counts were unchanged, and the smoke rows and generated
+file were removed. Sequential real actor and Compose deliveries also completed
+in one worker process after per-delivery engine disposal was added. Full
+evidence is in the repository-external Task 007 handoff and review bundle.

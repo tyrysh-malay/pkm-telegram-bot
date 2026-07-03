@@ -49,6 +49,7 @@ TEST_DATABASE_URL = _configure_test_database_url()
 
 from app.db.models import Artifact
 from app.db.models import Message
+from app.db.models import ProcessingTask
 from app.db.models import User
 from app.db.session import dispose_engine
 from app.db.session import get_session_factory
@@ -94,6 +95,7 @@ async def cleanup_database_rows() -> None:
 
     async with session_factory() as session:
         async with session.begin():
+            await session.execute(delete(ProcessingTask))
             await session.execute(delete(Artifact))
             await session.execute(delete(Message))
             await session.execute(delete(User))

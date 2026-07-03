@@ -12,7 +12,8 @@ class Settings(BaseSettings):
     openai_api_key: str | None = None
     database_url: str | None = None
     test_database_url: str | None = None
-    redis_url: str | None = None
+    redis_url: str = "redis://redis:6379/0"
+    task_dispatcher_enabled: bool = False
     knowledge_base_path: Path = Path("knowledge-base")
 
     model_config = SettingsConfigDict(

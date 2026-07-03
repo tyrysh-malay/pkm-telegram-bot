@@ -12,6 +12,7 @@ dependencies = [
     "alembic>=1.14,<2.0",
     "aiogram>=3,<4",
     "asyncpg>=0.30,<1.0",
+    "dramatiq[redis]>=2.2,<3.0",
     "fastapi>=0.115,<1.0",
     "pydantic-settings>=2.6,<3.0",
     "SQLAlchemy>=2.0,<3.0",

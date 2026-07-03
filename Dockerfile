@@ -10,7 +10,7 @@ RUN if [ "$INSTALL_DEV" = "true" ]; then \
         && rm -rf /var/lib/apt/lists/*; \
     fi
 
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md docker-compose.yml ./
 COPY app ./app
 COPY alembic ./alembic
 COPY alembic.ini ./
