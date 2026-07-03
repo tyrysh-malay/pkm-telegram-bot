@@ -398,11 +398,12 @@ User persistence, message ownership, idempotency, authorization, and future grou
 * Messages store `telegram_chat_id` and `telegram_message_id`.
 * Messages reference their sender through the application user relation.
 * The code and fixtures must not derive sender identity from chat ID.
-* Existing implementation and fixtures require repository verification for accidental identity conflation.
+* Task 008 verified that routing and fixtures keep sender, chat, and message
+  identity separate.
 
-**Status:** accepted principle; implementation verification unresolved
+**Status:** accepted
 
-**Related task:** Task 001; Task 002
+**Related task:** Task 001; Task 002; Task 008
 
 ---
 
@@ -410,17 +411,21 @@ User persistence, message ownership, idempotency, authorization, and future grou
 
 **Decision**
 
-The test suite should eventually make identity assumptions explicit with fixtures for:
+The test suite makes identity assumptions explicit with fixtures for:
 
 * a private chat;
 * a group chat;
 * different senders in the same chat;
 * repeated delivery of the same message;
-* different messages with identical text.
+* different messages with identical text;
+* mutable-profile changes and an unknown sender copying those profile fields.
 
 **Context or problem**
 
-Separate PostgreSQL queries showed chat IDs and user IDs with different values, but they did not join messages to users. The exact fixture mapping is therefore not confirmed.
+Separate PostgreSQL queries showed chat IDs and user IDs with different values,
+but they did not join messages to users. This originally left the exact fixture
+mapping unconfirmed. Task 008 added routing and persistence coverage that
+resolved that uncertainty.
 
 **Reasoning**
 
@@ -433,13 +438,16 @@ Explicit fixtures make it possible to verify that:
 
 **Consequences**
 
-* Existing fixtures must be inspected before adding new ones.
-* Test data observed in the development database may already cover some cases.
-* The repository must be checked before treating this fixture matrix as complete.
+* Private and group contexts are covered explicitly.
+* Fixtures distinguish sender IDs from chat IDs and exercise different senders.
+* Repeated delivery of one Telegram message is distinguished from different
+  message IDs containing identical text.
+* Mutable-profile changes preserve the same sender identity, while copying
+  profile fields does not grant another sender that identity.
 
-**Status:** unresolved
+**Status:** accepted
 
-**Related task:** Task 001; Task 002; identity follow-up task
+**Related task:** Task 001; Task 002; Task 008
 
 ---
 
@@ -973,6 +981,50 @@ table.
 **Status:** accepted
 
 **Related task:** Task 007
+
+---
+
+## D-027 — Restrict Telegram ingestion at a configured private-owner boundary
+
+**Decision**
+
+Authorize Telegram message handling only when the update is from a private
+chat and `message.from_user.id` belongs to the configured startup allowlist.
+Silently reject every other Telegram message before handler response or
+operational-state mutation.
+
+Authorization must not use chat ID, message ID, username, names, persisted User
+profile fields, or another mutable identity attribute. Enabled polling requires
+a non-empty allowlist represented as a JSON array of positive numeric Telegram
+user IDs.
+
+**Context or problem**
+
+The bot is a personal ingestion boundary. Content-based aiogram routing alone
+allowed an unknown sender or a group participant to create durable User,
+Message, and ProcessingTask state and trigger downstream processing.
+
+**Reasoning**
+
+Telegram sender user ID is the stable identity already kept separate from chat
+and message identity. A shared app-process routing filter applies the check to
+every current message handler before persistence while avoiding database,
+Redis, or Telegram lookups.
+
+**Consequences**
+
+* Only allowlisted senders in private chats can use `/start` or text ingestion.
+* Missing-sender, unknown-sender, group, supergroup, and channel messages receive
+  no response and create no state.
+* The allowlist is immutable for the process lifetime; changes require restart.
+* No database permission model or runtime owner-management command is added.
+* Existing durable ProcessingTasks are not reauthorized or cancelled, and the
+  worker does not need the allowlist.
+* Group ingestion and runtime owner management remain postponed.
+
+**Status:** accepted
+
+**Related task:** Task 008
 
 ---
 

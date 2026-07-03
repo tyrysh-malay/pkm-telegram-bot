@@ -9,6 +9,9 @@ infrastructure services:
 Telegram long polling (optional)
         |
         v
+private chat + configured sender-ID gate
+        |
+        v
 FastAPI + aiogram app
         |
         +-- atomic Message + ProcessingTask --> PostgreSQL
@@ -67,6 +70,8 @@ Current responsibilities:
 
 * expose liveness and database-readiness endpoints;
 * run optional single-process Telegram long polling;
+* reject non-private, missing-sender, and non-allowlisted Telegram messages
+  before any handler response or persistence;
 * atomically persist Telegram text Messages and pending ProcessingTasks;
 * run one optional dispatcher loop independently of Telegram polling;
 * recover expired queued and running leases and publish due task UUIDs.
@@ -74,6 +79,13 @@ Current responsibilities:
 The handler does not contact Redis. Telegram acknowledgement means durable
 PostgreSQL capture, not processing success. Redis failure does not prevent app
 startup, ingestion, `/health`, or database-only `/ready`.
+
+The authorization gate belongs to the app process at the aiogram message
+routing boundary. It compares `message.from_user.id` with the immutable
+startup configuration and requires Telegram chat type `private`; it performs
+no Telegram, PostgreSQL, or Redis lookup. Existing durable ProcessingTasks are
+not reauthorized, so this trust boundary changes neither worker behavior nor
+the two-process runtime topology.
 
 ### PostgreSQL
 

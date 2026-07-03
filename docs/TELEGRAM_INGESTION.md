@@ -13,6 +13,7 @@ The bot supports:
 
 * `/start`;
 * ordinary Telegram text messages;
+* configured sender-ID authorization in private chats;
 * user persistence;
 * message persistence;
 * duplicate message protection;
@@ -48,6 +49,7 @@ Expected configuration:
 ```text
 TELEGRAM_BOT_ENABLED=false
 TELEGRAM_BOT_TOKEN=
+TELEGRAM_ALLOWED_USER_IDS=[]
 ```
 
 When `TELEGRAM_BOT_ENABLED=false`:
@@ -58,9 +60,17 @@ When `TELEGRAM_BOT_ENABLED=false`:
 
 When `TELEGRAM_BOT_ENABLED=true`:
 
-* `TELEGRAM_BOT_TOKEN` is required;
+* `TELEGRAM_BOT_TOKEN` must be non-blank;
+* `TELEGRAM_ALLOWED_USER_IDS` must be a non-empty JSON array of positive
+  numeric Telegram user IDs;
 * the application starts one aiogram polling task;
 * the polling task is stopped cleanly during application shutdown.
+
+Quoted IDs, booleans, nulls, floats, zero, negative IDs, values above the
+positive signed 64-bit range, and malformed JSON are invalid. Duplicate IDs
+normalize to one set member. Configuration is loaded once and changes require
+an app restart. Disabled polling permits an omitted, empty, or populated
+allowlist.
 
 Polling mode assumes one application process. Multiple app replicas would create competing pollers and are out of scope.
 
@@ -76,17 +86,44 @@ Send me a text note and I will save it for processing.
 
 The `/start` command does not need to be persisted as a knowledge message.
 
+## Private-owner authorization
+
+Every Telegram message passes through one shared aiogram routing filter before
+the `/start` or ordinary-text handler:
+
+```text
+Telegram message
+→ private chat + configured message.from_user.id
+→ existing command or ingestion behavior
+```
+
+Authorization uses only the numeric sender ID in `message.from_user.id`.
+`message.chat.id`, message ID, username, names, and persisted User profile
+fields never grant access. An allowlisted sender remains authorized when their
+mutable profile fields change.
+
+Messages without usable sender metadata, messages from unknown senders, and
+all group, supergroup, and channel contexts are silently rejected. Rejection
+sends no response and occurs before User lookup or mutation, Message or
+ProcessingTask insertion, acknowledgement, broker delivery, or artifact
+processing. The gate performs no database, Redis, or Telegram lookup.
+
+The allowlist is startup configuration rather than a database permission
+model. There is no runtime administration command, and already durable tasks
+continue through the worker without reauthorization.
+
 ## Text message behavior
 
 For an ordinary text message:
 
-1. read Telegram user and chat metadata;
-2. create the user if they do not exist;
-3. update mutable Telegram profile fields when the user already exists;
-4. build an idempotency key;
-5. persist the message and one pending `generate_note` ProcessingTask in the
+1. authorize a usable sender ID in a private chat;
+2. read Telegram user and chat metadata;
+3. create the user if they do not exist;
+4. update mutable Telegram profile fields when the user already exists;
+5. build an idempotency key;
+6. persist the message and one pending `generate_note` ProcessingTask in the
    same transaction;
-6. send an acknowledgement after commit.
+7. send an acknowledgement after commit.
 
 Persisted message values:
 
@@ -199,16 +236,6 @@ Processing attempts, fixed retry backoff, and lease recovery are owned by the
 ProcessingTask state machine. Telegram completion/failure notifications remain
 postponed.
 
-## Security postponed
-
-The project is intended to become a personal bot, but user allowlisting is postponed to a dedicated reliability/security task.
-
-Until then:
-
-* do not deploy the bot publicly;
-* do not advertise its username;
-* use it only for local development and controlled testing.
-
 ## Testing strategy
 
 Automated tests must not contact Telegram.
@@ -216,6 +243,8 @@ Automated tests must not contact Telegram.
 Tests should verify:
 
 * a Telegram user can be created;
+* only configured sender IDs in private chats reach handlers;
+* rejected updates send no response and create no operational state;
 * existing mutable user fields are updated;
 * a text message is persisted correctly;
 * the idempotency key has the expected format;
