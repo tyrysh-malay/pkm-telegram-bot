@@ -90,37 +90,23 @@ Check the database readiness endpoint:
 curl http://localhost:8000/ready
 ```
 
-## Repository context
+## Contributing through pull requests
 
-Print a compact Markdown snapshot of safe repository facts to standard output:
+Repository-owned task specifications remain the review contract. For each
+authorized task:
 
-```bash
-python3 scripts/project_context.py
-```
+1. synchronize the local default branch with its remote;
+2. create the task's dedicated branch;
+3. commit the accepted task contract and open a draft pull request;
+4. confirm connected review access;
+5. implement and verify locally;
+6. commit and push only the authorized task branch;
+7. review the exact pushed pull-request head;
+8. merge only after approval and separate explicit authorization.
 
-The command is read-only. To save a handoff outside the repository:
-
-```bash
-mkdir -p "$HOME/pkm-handoffs"
-python3 scripts/project_context.py > "$HOME/pkm-handoffs/pkm-project-context.md"
-```
-
-Use the compact report for orientation and metadata handoff. For review of an
-uncommitted task implementation, generate the full implementation-review bundle:
-
-```bash
-python3 scripts/review_bundle.py \
-  --task tasks/<active-task>.md \
-  --report "$HOME/pkm-handoffs/<task>-handoff.md" \
-  > "$HOME/pkm-handoffs/<task>-review-bundle.md"
-```
-
-The completion report and redirected bundle should normally stay outside the
-repository. The command is read-only, never includes ignored files, and fails
-instead of truncating or packaging unsafe, unsupported, or oversized evidence.
-The compact context report and full review bundle serve different purposes.
-
-See `docs/WORKFLOW.md` for the full repository-driven project workflow.
+Uncommitted local work is not visible through GitHub and cannot be included in
+pull-request review. See `docs/WORKFLOW.md` for authority boundaries, evidence
+precedence, correction handling, and documentation responsibilities.
 
 ## Telegram polling
 

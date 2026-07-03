@@ -813,7 +813,9 @@ Chat repository access.
 * Automatic commits and automatic rewriting of `docs/CURRENT_STATE.md` are not
   part of this decision.
 
-**Status:** accepted
+**Status:** superseded
+
+**Superseded by:** D-028
 
 **Related task:** Task 004
 
@@ -875,7 +877,9 @@ complete without leaking or silently omitting content.
   operation.
 * Reviewers regenerate rather than reconciling conflicting snapshots manually.
 
-**Status:** accepted
+**Status:** superseded
+
+**Superseded by:** D-028
 
 **Related task:** Task 005
 
@@ -1025,6 +1029,66 @@ Redis, or Telegram lookups.
 **Status:** accepted
 
 **Related task:** Task 008
+
+---
+
+## D-028 — Review bounded tasks through exact GitHub pull-request heads
+
+**Decision**
+
+Repository-owned task specifications remain the implementation-review
+contracts. Each active task uses one pushed task branch and one GitHub pull
+request, with the contract pinned by its repository path and exact full commit
+SHA. Normal task work is not committed or pushed directly to the default
+branch.
+
+GitHub represents committed and pushed state only. Codex's local uncommitted
+working tree remains a distinct authority for editing and local verification;
+Handoff Review cannot inspect it. The PR base and exact pushed head, commits,
+and patch replace generated review packaging. The PR description replaces the
+separate external completion summary, but its verification results remain
+supplied claims unless an available CI check executed them independently.
+
+Handoff Review identifies the exact PR head SHA reviewed. Corrections use
+bounded commits on the same task branch and require review of the new head.
+Codex does not force-push reviewed history, push directly to the default branch,
+or merge without separate explicit authorization. The normal accepted merge
+method is a merge commit so contract and implementation commit identities are
+preserved.
+
+The Task 004 and Task 005 reporting mechanisms are superseded only because the
+Task 009 access gate succeeded for the explicitly accepted public-repository
+pilot. Connector access while the repository is private remains unverified and
+must be established separately before making that claim.
+
+**Context or problem**
+
+Generated reports and review packages were a compatibility boundary when the
+review surface could not inspect the repository. Once connected review could
+inspect an exact contract commit and PR patch, maintaining parallel generated
+evidence added avoidable staleness and upload risk.
+
+**Reasoning**
+
+The branch and PR model preserves the principles behind D-023 and D-024 while
+using Git's native immutable identities. The repository still owns the
+workflow, the contract still precedes implementation, requirements are not
+rewritten to fit code, summaries are not independent sources of truth, and
+review evidence still names one exact repository state.
+
+**Consequences**
+
+* Task specifications define their own exact commit, push, PR, correction, and
+  merge authority.
+* The task path at the recorded contract SHA outranks later branch-head edits.
+* PR descriptions must distinguish reported local verification from CI.
+* Any new pushed commit invalidates approval of the previous head.
+* Private-repository connector access remains an explicit unverified item after
+  the public Task 009 pilot.
+
+**Status:** accepted
+
+**Related task:** Task 009
 
 ---
 
