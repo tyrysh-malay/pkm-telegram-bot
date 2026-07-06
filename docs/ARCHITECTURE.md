@@ -28,7 +28,14 @@ FastAPI + aiogram app
                                                |
                          Artifact + Message done + Markdown
                                                |
-                              ProcessingTask finalization
+                    generate_note success + optional atomic
+                         publish_artifact task creation
+                                               |
+                         dispatcher → Redis → worker
+                                               |
+                             publish_artifact_to_git(...)
+                                               |
+                           local commit + Artifact SHA
 ```
 
 PostgreSQL is the durable orchestration authority. Redis carries actor
@@ -62,15 +69,16 @@ be attached to a new row on the next explicit invocation; a valid row with a
 missing file can recreate it. Conflicting files and inconsistent rows fail
 without replacement or silent repair.
 
-## Manual Git-publication boundary
+## Local Git-publication boundary
 
-Task 011 adds a separate developer-invoked stage:
+Task 011 owns one reusable local publication stage. A developer can invoke it
+manually, and a `publish_artifact` ProcessingTask can invoke the same function:
 
 ```text
 existing valid Artifact + exact established file
     |
     v
-manual Git publisher
+manual CLI or publication worker task
     |
     +--> one local selected-path commit
     +--> Artifact.git_commit_sha
@@ -79,13 +87,12 @@ manual Git publisher
 The publisher locks the Artifact row and takes one repository-wide filesystem
 lock while validating Git state, committing, and finalizing PostgreSQL. It
 reuses Task 006 rendering and metadata rules only to validate the existing
-Artifact and bytes; it never creates or repairs a note and is not called by the
-app dispatcher or worker.
+Artifact and bytes; it never creates or repairs a note.
 
 Git and PostgreSQL do not share a transaction. A commit that survives a failed
 database update remains valid local history and is reconciled on the next
-manual invocation through stable Artifact-ID and path trailers. No Git remote
-operation is part of this boundary.
+manual or automatic invocation through stable Artifact-ID and path trailers.
+No Git remote operation is part of this boundary.
 
 ## Components
 
@@ -130,17 +137,20 @@ knowledge-base/
 
 Compose bind-mounts this directory from the host. File publication uses a fully
 written same-directory temporary file and a hard-link no-replace operation.
-Manual Git publication additionally requires this exact directory to be an
+Local Git publication additionally requires this exact directory to be an
 initialized non-bare Git top-level with an attached branch and repository-local
-author identity. Git commits are not automated.
+author identity.
 
 ### Worker and Redis
 
 One Dramatiq worker process with one thread receives only a canonical
-ProcessingTask UUID. It claims the row in PostgreSQL, commits a running lease,
-calls the unchanged idempotent Task 006 function with a fresh session, and
-conditionally finalizes the claimed attempt. Dramatiq automatic retries and a
-Redis result backend are disabled.
+ProcessingTask UUID. It reloads the task type from PostgreSQL, commits a running
+lease, and dispatches either to unchanged Task 006 note generation or unchanged
+Task 011 local Git publication. Successful `generate_note` finalization
+atomically creates one pending `publish_artifact` task when
+`GIT_PUBLICATION_ENABLED=true`; disabling the setting stops only new task
+creation, not execution of durable publication tasks. Dramatiq automatic
+retries and a Redis result backend are disabled.
 
 Queued leases recover broker loss by returning work to pending. Expired running
 leases become retrying with fixed backoff or failed at the attempt limit. A
@@ -162,5 +172,5 @@ Not implemented:
 
 * AI generation;
 * voice, image, link, file, or PDF processing;
-* automatic Git commits or remote synchronization;
+* remote Git synchronization;
 * LangChain, LangGraph, vector databases, RAG, microservices, or Kubernetes.

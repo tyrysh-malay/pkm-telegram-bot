@@ -10,7 +10,9 @@ from typing import Literal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.knowledge.errors import GitPublicationError
+from app.knowledge.errors import GitPublicationBusyError
+from app.knowledge.errors import GitPublicationInvariantError
+from app.knowledge.errors import GitPublicationOperationalError
 from app.knowledge.errors import GitPublicationTransactionError
 from app.knowledge.processing import validate_existing_artifact
 
@@ -43,11 +45,11 @@ class _GitRepository:
         try:
             self.root = root.resolve(strict=True)
         except OSError as exc:
-            raise GitPublicationError(
+            raise GitPublicationInvariantError(
                 "knowledge-base root does not exist or is unreadable"
             ) from exc
         if not self.root.is_dir():
-            raise GitPublicationError("knowledge-base root is not a directory")
+            raise GitPublicationInvariantError("knowledge-base root is not a directory")
 
     def run(
         self,
@@ -79,11 +81,15 @@ class _GitRepository:
                 timeout=GIT_TIMEOUT_SECONDS,
             )
         except FileNotFoundError as exc:
-            raise GitPublicationError("Git executable is unavailable") from exc
+            raise GitPublicationOperationalError(
+                "Git executable is unavailable"
+            ) from exc
         except subprocess.TimeoutExpired as exc:
-            raise GitPublicationError("Git command timed out") from exc
+            raise GitPublicationOperationalError("Git command timed out") from exc
         except OSError as exc:
-            raise GitPublicationError("Git command could not be executed") from exc
+            raise GitPublicationOperationalError(
+                "Git command could not be executed"
+            ) from exc
 
         result = _GitResult(
             stdout=completed.stdout,
@@ -93,7 +99,7 @@ class _GitRepository:
         if check and result.returncode != 0:
             detail = _sanitized_detail(result.stderr, self.root)
             suffix = f": {detail}" if detail else ""
-            raise GitPublicationError(f"Git command failed{suffix}")
+            raise GitPublicationOperationalError(f"Git command failed{suffix}")
         return result
 
     def text(self, *arguments: str) -> str:
@@ -108,14 +114,14 @@ class _GitRepository:
             check=False,
         )
         if repository_state.returncode != 0:
-            raise GitPublicationError(
+            raise GitPublicationInvariantError(
                 "knowledge-base root is not an initialized Git repository; initialize it manually"
             )
         state_lines = repository_state.stdout.decode("ascii").splitlines()
         if state_lines == ["false", "true"]:
-            raise GitPublicationError("knowledge-base Git repository is bare")
+            raise GitPublicationInvariantError("knowledge-base Git repository is bare")
         if state_lines != ["true", "false"]:
-            raise GitPublicationError(
+            raise GitPublicationInvariantError(
                 "knowledge-base root is not an initialized Git working tree"
             )
 
@@ -123,13 +129,15 @@ class _GitRepository:
         try:
             top_level = Path(top_level_text).resolve(strict=True)
         except OSError as exc:
-            raise GitPublicationError("Git repository top-level is unreadable") from exc
+            raise GitPublicationInvariantError(
+                "Git repository top-level is unreadable"
+            ) from exc
         if top_level != self.root:
-            raise GitPublicationError(
+            raise GitPublicationInvariantError(
                 "configured knowledge-base root must be the exact Git top-level"
             )
         if top_level == APPLICATION_ROOT:
-            raise GitPublicationError(
+            raise GitPublicationInvariantError(
                 "knowledge-base Git repository must be distinct from the application repository"
             )
 
@@ -137,7 +145,7 @@ class _GitRepository:
             "symbolic-ref", "--quiet", "--short", "HEAD", check=False
         )
         if branch.returncode != 0 or not branch.stdout.strip():
-            raise GitPublicationError("knowledge-base Git HEAD is detached")
+            raise GitPublicationInvariantError("knowledge-base Git HEAD is detached")
 
         for marker in (
             "MERGE_HEAD",
@@ -150,14 +158,14 @@ class _GitRepository:
             if not marker_path.is_absolute():
                 marker_path = self.root / marker_path
             if marker_path.exists():
-                raise GitPublicationError(
+                raise GitPublicationInvariantError(
                     "knowledge-base Git repository has a history operation in progress"
                 )
 
         for key in ("user.name", "user.email"):
             value = self.run("config", "--local", "--get", key, check=False)
             if value.returncode != 0 or not value.stdout.decode().strip():
-                raise GitPublicationError(
+                raise GitPublicationInvariantError(
                     f"knowledge-base repository-local {key} is not configured"
                 )
 
@@ -176,7 +184,7 @@ class _GitRepository:
             "--ita-visible-in-index",
         ).stdout
         if unmerged or staged_or_intent_to_add:
-            raise GitPublicationError(
+            raise GitPublicationInvariantError(
                 "knowledge-base Git index must be empty; resolve staged, unmerged, or intent-to-add state manually"
             )
 
@@ -196,20 +204,22 @@ class _GitRepository:
             "ls-tree", "-z", commit_sha, "--", file_path
         ).stdout.rstrip(b"\0")
         if not entry or b"\0" in entry:
-            raise GitPublicationError(
+            raise GitPublicationInvariantError(
                 f"publication commit does not contain exact artifact path {file_path}"
             )
         try:
             metadata, returned_path = entry.split(b"\t", 1)
             mode, object_type, object_id = metadata.split(b" ", 2)
         except ValueError as exc:
-            raise GitPublicationError("publication commit tree is malformed") from exc
+            raise GitPublicationInvariantError(
+                "publication commit tree is malformed"
+            ) from exc
         if (
             returned_path.decode("utf-8", errors="strict") != file_path
             or object_type != b"blob"
             or mode not in {b"100644", b"100755"}
         ):
-            raise GitPublicationError(
+            raise GitPublicationInvariantError(
                 f"publication commit does not contain exact artifact path {file_path}"
             )
         return self.run("cat-file", "blob", object_id.decode("ascii")).stdout
@@ -222,23 +232,33 @@ class _GitRepository:
         expected_bytes: bytes,
     ) -> str:
         if not FULL_OBJECT_ID.fullmatch(commit_sha):
-            raise GitPublicationError("stored Git commit SHA is not canonical hexadecimal")
+            raise GitPublicationInvariantError(
+                "stored Git commit SHA is not canonical hexadecimal"
+            )
         resolved = self.run(
             "rev-parse", "--verify", f"{commit_sha}^{{commit}}", check=False
         )
         if resolved.returncode != 0:
-            raise GitPublicationError("stored Git commit does not exist as a local commit")
+            raise GitPublicationInvariantError(
+                "stored Git commit does not exist as a local commit"
+            )
         canonical = resolved.stdout.decode("ascii", errors="strict").strip()
         if canonical != commit_sha:
-            raise GitPublicationError("stored Git commit SHA is not a full canonical object ID")
+            raise GitPublicationInvariantError(
+                "stored Git commit SHA is not a full canonical object ID"
+            )
 
         message = self.commit_message(canonical)
         ids = _trailer_values(message, ARTIFACT_ID_TRAILER)
         paths = _trailer_values(message, ARTIFACT_PATH_TRAILER)
         if ids != [str(artifact_id)] or paths != [file_path]:
-            raise GitPublicationError("publication commit has invalid artifact trailers")
+            raise GitPublicationInvariantError(
+                "publication commit has invalid artifact trailers"
+            )
         if self.commit_blob(canonical, file_path) != expected_bytes:
-            raise GitPublicationError("publication commit artifact bytes do not match")
+            raise GitPublicationInvariantError(
+                "publication commit artifact bytes do not match"
+            )
         return canonical
 
     def find_publication(
@@ -267,7 +287,7 @@ class _GitRepository:
         if not matches:
             return None
         if len(matches) != 1:
-            raise GitPublicationError(
+            raise GitPublicationInvariantError(
                 "multiple publication commits match this Artifact ID"
             )
         return self.validate_commit(
@@ -277,12 +297,14 @@ class _GitRepository:
     def selected_path_is_ignored(self, file_path: str) -> bool:
         result = self.run("check-ignore", "--quiet", "--", file_path, check=False)
         if result.returncode not in {0, 1}:
-            raise GitPublicationError("Git could not inspect ignore rules")
+            raise GitPublicationOperationalError("Git could not inspect ignore rules")
         return result.returncode == 0
 
     def stage_and_verify(self, file_path: str, expected_bytes: bytes) -> bool:
         if self.selected_path_is_ignored(file_path):
-            raise GitPublicationError(f"artifact path is ignored by Git: {file_path}")
+            raise GitPublicationInvariantError(
+                f"artifact path is ignored by Git: {file_path}"
+            )
         self.run("add", "--", file_path)
 
         staged_paths = self.run(
@@ -291,7 +313,9 @@ class _GitRepository:
         paths = [] if not staged_paths else staged_paths.split(b"\0")
         encoded_path = file_path.encode("utf-8")
         if paths not in ([], [encoded_path]):
-            raise GitPublicationError("Git staged paths outside the selected Artifact")
+            raise GitPublicationInvariantError(
+                "Git staged paths outside the selected Artifact"
+            )
 
         if paths:
             entry = self.run(
@@ -301,20 +325,29 @@ class _GitRepository:
                 metadata, returned_path = entry.split(b"\t", 1)
                 _mode, object_id, stage = metadata.split(b" ", 2)
             except ValueError as exc:
-                raise GitPublicationError("selected Artifact index entry is malformed") from exc
+                raise GitPublicationInvariantError(
+                    "selected Artifact index entry is malformed"
+                ) from exc
             if returned_path != encoded_path or stage != b"0":
-                raise GitPublicationError("selected Artifact index entry is unmerged")
+                raise GitPublicationInvariantError(
+                    "selected Artifact index entry is unmerged"
+                )
             staged_bytes = self.run(
                 "cat-file", "blob", object_id.decode("ascii")
             ).stdout
             if staged_bytes != expected_bytes:
-                raise GitPublicationError(
+                raise GitPublicationInvariantError(
                     "Git attributes or filters changed the staged Artifact bytes"
                 )
             return True
 
-        if not self.head_exists() or self.commit_blob("HEAD", file_path) != expected_bytes:
-            raise GitPublicationError("Git did not stage the exact Artifact bytes")
+        if (
+            not self.head_exists()
+            or self.commit_blob("HEAD", file_path) != expected_bytes
+        ):
+            raise GitPublicationInvariantError(
+                "Git did not stage the exact Artifact bytes"
+            )
         return False
 
     def create_commit(
@@ -355,7 +388,10 @@ class _GitRepository:
 
 
 def _sanitized_detail(stderr: bytes, root: Path) -> str:
-    detail = stderr.decode("utf-8", errors="replace").replace(str(root), "<knowledge-base>")
+    detail = stderr.decode("utf-8", errors="replace").replace(
+        str(root),
+        "<knowledge-base>",
+    )
     return " ".join(detail.split())[:300]
 
 
@@ -372,12 +408,14 @@ def _acquire_lock(lock_path: Path):
     try:
         descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
     except OSError as exc:
-        raise GitPublicationError("cannot open the Git publication lock") from exc
+        raise GitPublicationOperationalError(
+            "cannot open the Git publication lock"
+        ) from exc
     try:
         fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
     except BlockingIOError as exc:
         os.close(descriptor)
-        raise GitPublicationError(
+        raise GitPublicationBusyError(
             "knowledge-base Git publication is already in progress"
         ) from exc
     except OSError:
@@ -468,7 +506,7 @@ async def publish_artifact_to_git(
                 cleanup_error = exc
         await session.rollback()
         if cleanup_error is not None:
-            raise GitPublicationError(
+            raise GitPublicationOperationalError(
                 f"{primary_error}; selected-path index cleanup also failed: "
                 f"{cleanup_error}; manual index inspection is required"
             ) from primary_error

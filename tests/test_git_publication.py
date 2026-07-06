@@ -14,6 +14,9 @@ from app.db.models import Message
 from app.db.models import User
 from app.db.session import get_session_factory
 from app.knowledge.errors import GitPublicationError
+from app.knowledge.errors import GitPublicationBusyError
+from app.knowledge.errors import GitPublicationInvariantError
+from app.knowledge.errors import GitPublicationOperationalError
 from app.knowledge.errors import GitPublicationTransactionError
 from app.knowledge.errors import KnowledgeBaseError
 from app.knowledge.errors import UnsupportedFileEntryError
@@ -508,9 +511,9 @@ def test_repository_lock_busy_fails_without_git_or_database_change(
         descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
         fcntl.flock(descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
         try:
-            with pytest.raises(GitPublicationError, match="already in progress"):
+            with pytest.raises(GitPublicationBusyError, match="already in progress"):
                 await publish(tmp_path, artifact_id)
-            with pytest.raises(GitPublicationError, match="already in progress"):
+            with pytest.raises(GitPublicationBusyError, match="already in progress"):
                 await publish(tmp_path, other_artifact_id)
         finally:
             fcntl.flock(descriptor, fcntl.LOCK_UN)
@@ -591,6 +594,19 @@ def test_active_caller_transaction_is_rejected(tmp_path: Path) -> None:
     asyncio.run(run())
 
 
+def test_git_timeout_is_typed_as_retryable_operation(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def timeout(*_args, **_kwargs):
+        raise subprocess.TimeoutExpired(["git"], 15)
+
+    monkeypatch.setattr(subprocess, "run", timeout)
+
+    with pytest.raises(GitPublicationOperationalError, match="timed out"):
+        _GitRepository(tmp_path).run("--version")
+
+
 def test_inconsistent_stored_sha_fails_closed(tmp_path: Path) -> None:
     async def run() -> None:
         initialize_repository(tmp_path)
@@ -602,7 +618,10 @@ def test_inconsistent_stored_sha_fails_closed(tmp_path: Path) -> None:
             artifact.git_commit_sha = "abc"
             await session.commit()
 
-        with pytest.raises(GitPublicationError, match="does not exist|canonical"):
+        with pytest.raises(
+            GitPublicationInvariantError,
+            match="does not exist|canonical",
+        ):
             await publish(tmp_path, artifact_id)
         assert git(tmp_path, "rev-list", "--count", "--all").stdout.strip() == "0"
 

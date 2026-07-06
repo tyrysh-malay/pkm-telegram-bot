@@ -70,6 +70,22 @@ def test_due_task_publishes_uuid_and_becomes_queued() -> None:
     asyncio.run(run())
 
 
+def test_dispatcher_selects_publication_task_without_task_type_branching() -> None:
+    async def run() -> None:
+        task = await create_task(
+            task_type="publish_artifact",
+            available_at=NOW - timedelta(seconds=1),
+        )
+
+        candidates = await find_dispatch_candidates(now=NOW)
+
+        assert [candidate.id for candidate in candidates] == [task.id]
+        assert await mark_task_queued(candidates[0], now=NOW) is True
+        assert (await load_task(task.id)).status == "queued"
+
+    asyncio.run(run())
+
+
 def test_future_retry_is_not_dispatched_and_batch_order_is_deterministic() -> None:
     async def run() -> None:
         late = await create_task(

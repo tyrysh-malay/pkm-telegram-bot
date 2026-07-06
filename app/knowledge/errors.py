@@ -42,5 +42,17 @@ class GitPublicationError(KnowledgeArtifactError):
     """A validated artifact cannot be published safely to local Git."""
 
 
-class GitPublicationTransactionError(GitPublicationError):
+class GitPublicationInvariantError(GitPublicationError):
+    """Publication data or repository state violates the durable contract."""
+
+
+class GitPublicationOperationalError(GitPublicationError):
+    """Publication failed because a retryable operation could not complete."""
+
+
+class GitPublicationBusyError(GitPublicationOperationalError):
+    """Another publication currently owns the repository lock."""
+
+
+class GitPublicationTransactionError(GitPublicationInvariantError):
     """The supplied session cannot own the publication transaction."""

@@ -21,6 +21,7 @@ services:
       KNOWLEDGE_BASE_PATH: "${KNOWLEDGE_BASE_PATH:-knowledge-base}"
       REDIS_URL: "${REDIS_URL:-redis://redis:6379/0}"
       TASK_DISPATCHER_ENABLED: "true"
+      GIT_PUBLICATION_ENABLED: "${GIT_PUBLICATION_ENABLED:-false}"
     volumes:
       - ./knowledge-base:/app/knowledge-base
 
@@ -36,6 +37,7 @@ services:
       DATABASE_URL: "${DATABASE_URL:-postgresql+asyncpg://pkm:pkm@postgres:5432/pkm}"
       REDIS_URL: "${REDIS_URL:-redis://redis:6379/0}"
       KNOWLEDGE_BASE_PATH: "${KNOWLEDGE_BASE_PATH:-knowledge-base}"
+      GIT_PUBLICATION_ENABLED: "${GIT_PUBLICATION_ENABLED:-false}"
     volumes:
       - ./knowledge-base:/app/knowledge-base
 

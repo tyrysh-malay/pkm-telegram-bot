@@ -1,6 +1,6 @@
 # Task 012: Add durable automatic Git publication for generated artifacts
 
-**Status:** planned
+**Status:** ready for review
 **Depends on:** Tasks 000–011 and completion of the standalone Task 011 status correction
 **Target file:** `tasks/012-durable-automatic-git-publication.md`
 **Expected branch:** `task/012-durable-automatic-git-publication`

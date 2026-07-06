@@ -1181,6 +1181,52 @@ still allowing unrelated unstaged and untracked work.
 
 ---
 
+## D-031 — Chain local Git publication through a second durable ProcessingTask
+
+**Decision**
+
+After successful deterministic note generation, atomically mark the
+`generate_note` task succeeded and establish one `publish_artifact` task when
+automatic creation is enabled. Reuse the existing message-scoped
+ProcessingTask table, generic UUID actor payload, dispatcher, attempts, leases,
+and retry states. Resolve the existing note Artifact through `message_id` and
+invoke the unchanged Task 011 local publisher.
+
+`GIT_PUBLICATION_ENABLED` defaults to false and gates only downstream task
+creation. Existing durable publication tasks remain executable after the
+setting is disabled. Classify deterministic publication invariants as
+permanent and explicitly typed operational failures as retryable.
+
+**Context or problem**
+
+Manual publication left generated notes outside Git until an operator selected
+each Artifact. Performing Git work inside Task 006 would couple note validity to
+repository health and blur retry ownership across PostgreSQL, the filesystem,
+and Git.
+
+**Reasoning**
+
+A second durable task preserves independent generation and publication
+outcomes while reusing proven orchestration and publication boundaries. Atomic
+success/task creation prevents lost downstream work, and Task 011 idempotency
+handles manual-before-automatic execution, retained commits, duplicate
+delivery, and crashes after publication.
+
+**Consequences**
+
+* Task 006 remains the sole note-generation implementation.
+* Task 011 remains the sole Git-publication implementation.
+* PostgreSQL owns publication retries and terminal status; Redis remains
+  delivery transport only.
+* No schema migration, Artifact target column, generic DAG, backfill, or remote
+  synchronization is added.
+
+**Status:** accepted
+
+**Related task:** Task 012
+
+---
+
 # Possible future ADR split
 
 If this file becomes too large, the following decisions are good candidates for individual ADR files:
