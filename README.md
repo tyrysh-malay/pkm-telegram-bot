@@ -219,11 +219,13 @@ git -C knowledge-base config --local user.name "<desired commit author>"
 git -C knowledge-base config --local user.email "<desired commit email>"
 ```
 
-`KNOWLEDGE_BASE_PATH` must resolve to that repository's exact top-level, not a
-child of the application repository or another parent repository. The current
-branch must be attached (an unborn named branch is allowed), repository-local
-author values must be nonblank, and the Git index must be empty. Unrelated
-unstaged and untracked files are allowed and preserved.
+`KNOWLEDGE_BASE_PATH` must resolve to that repository's exact top-level and
+must not be the application repository itself. A distinct nested
+`knowledge-base/` repository is supported; discovering only the application or
+another parent repository is rejected. The current branch must be attached (an
+unborn named branch is allowed), repository-local author values must be
+nonblank, and the Git index must have no staged, unmerged, or intent-to-add
+entries. Unrelated unstaged and untracked files are allowed and preserved.
 
 After migrations are current and an Artifact's deterministic file already
 exists, publish one Artifact UUID:

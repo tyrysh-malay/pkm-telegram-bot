@@ -8,6 +8,7 @@ from pathlib import Path
 import pytest
 from sqlalchemy import select
 
+import app.knowledge.git_publication as git_publication
 from app.db.models import Artifact
 from app.db.models import Message
 from app.db.models import User
@@ -159,6 +160,77 @@ def test_exact_path_already_in_head_creates_identity_commit(tmp_path: Path) -> N
     asyncio.run(run())
 
 
+def test_application_repository_is_rejected_without_state_changes(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def run() -> None:
+        application_root = tmp_path / "application"
+        initialize_repository(application_root)
+        artifact_id = await establish_artifact(application_root)
+        monkeypatch.setattr(
+            git_publication,
+            "APPLICATION_ROOT",
+            application_root.resolve(),
+        )
+        before_head = git(application_root, "rev-parse", "--verify", "HEAD")
+        before_index = git(application_root, "ls-files", "--stage").stdout
+        before_status = git(
+            application_root,
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+        ).stdout
+
+        with pytest.raises(GitPublicationError, match="application repository"):
+            await publish(application_root, artifact_id)
+
+        after_head = git(application_root, "rev-parse", "--verify", "HEAD")
+        assert (after_head.returncode, after_head.stdout, after_head.stderr) == (
+            before_head.returncode,
+            before_head.stdout,
+            before_head.stderr,
+        )
+        assert git(application_root, "ls-files", "--stage").stdout == before_index
+        assert (
+            git(
+                application_root,
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=all",
+            ).stdout
+            == before_status
+        )
+        assert (await load_artifact(artifact_id)).git_commit_sha is None
+
+    asyncio.run(run())
+
+
+def test_distinct_nested_knowledge_base_repository_succeeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    async def run() -> None:
+        application_root = tmp_path / "application"
+        knowledge_base_root = application_root / "knowledge-base"
+        initialize_repository(application_root)
+        initialize_repository(knowledge_base_root)
+        monkeypatch.setattr(
+            git_publication,
+            "APPLICATION_ROOT",
+            application_root.resolve(),
+        )
+        artifact_id = await establish_artifact(knowledge_base_root)
+
+        result = await publish(knowledge_base_root, artifact_id)
+
+        assert result.outcome == "created"
+        assert (await load_artifact(artifact_id)).git_commit_sha == result.git_commit_sha
+        assert git(knowledge_base_root, "rev-parse", "HEAD").stdout.strip() == (
+            result.git_commit_sha
+        )
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("case", ("missing", "parent", "bare", "detached"))
 def test_invalid_repository_boundaries_fail_before_database_change(
     tmp_path: Path, case: str
@@ -231,6 +303,47 @@ def test_dirty_index_fails_without_modifying_staged_or_working_state(
 
         assert git(tmp_path, "diff", "--cached", "--name-only").stdout.strip() == "staged.txt"
         assert staged.read_text() == "staged\n"
+        assert (await load_artifact(artifact_id)).git_commit_sha is None
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("target", ("unrelated", "selected"))
+def test_intent_to_add_index_state_is_rejected_and_preserved(
+    tmp_path: Path, target: str
+) -> None:
+    async def run() -> None:
+        initialize_repository(tmp_path)
+        artifact_id = await establish_artifact(tmp_path)
+        artifact = await load_artifact(artifact_id)
+        intent_path = artifact.file_path if target == "selected" else "intent.txt"
+        if target == "unrelated":
+            (tmp_path / intent_path).write_text("leave intent state unchanged\n")
+        assert git(tmp_path, "add", "--intent-to-add", "--", intent_path).returncode == 0
+        before_status = git(
+            tmp_path,
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+        ).stdout
+        before_index = git(tmp_path, "ls-files", "--debug", "--", intent_path).stdout
+
+        with pytest.raises(GitPublicationError, match="index must be empty"):
+            await publish(tmp_path, artifact_id)
+
+        assert (
+            git(
+                tmp_path,
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=all",
+            ).stdout
+            == before_status
+        )
+        assert git(tmp_path, "ls-files", "--debug", "--", intent_path).stdout == (
+            before_index
+        )
+        assert git(tmp_path, "rev-parse", "--verify", "HEAD").returncode != 0
         assert (await load_artifact(artifact_id)).git_commit_sha is None
 
     asyncio.run(run())

@@ -20,6 +20,7 @@ LOCK_NAME = "pkm-artifact-publication.lock"
 ARTIFACT_ID_TRAILER = "PKM-Artifact-ID"
 ARTIFACT_PATH_TRAILER = "PKM-Artifact-Path"
 FULL_OBJECT_ID = re.compile(r"[0-9a-f]+\Z")
+APPLICATION_ROOT = Path(__file__).resolve().parents[2]
 
 
 @dataclass(frozen=True)
@@ -127,6 +128,10 @@ class _GitRepository:
             raise GitPublicationError(
                 "configured knowledge-base root must be the exact Git top-level"
             )
+        if top_level == APPLICATION_ROOT:
+            raise GitPublicationError(
+                "knowledge-base Git repository must be distinct from the application repository"
+            )
 
         branch = self.run(
             "symbolic-ref", "--quiet", "--short", "HEAD", check=False
@@ -164,9 +169,15 @@ class _GitRepository:
     def require_clean_index(self) -> None:
         unmerged = self.run("ls-files", "--unmerged", "-z").stdout
         staged = self.run("diff", "--cached", "--name-only", "-z").stdout
-        if unmerged or staged:
+        status = self.run(
+            "status", "--porcelain=v2", "-z", "--untracked-files=all"
+        ).stdout
+        intent_to_add = any(
+            record.startswith(b"1 .A ") for record in status.split(b"\0")
+        )
+        if unmerged or staged or intent_to_add:
             raise GitPublicationError(
-                "knowledge-base Git index must be empty; resolve staged or unmerged state manually"
+                "knowledge-base Git index must be empty; resolve staged, unmerged, or intent-to-add state manually"
             )
 
     def head_exists(self) -> bool:

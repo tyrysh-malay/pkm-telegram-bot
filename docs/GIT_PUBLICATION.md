@@ -24,9 +24,11 @@ git -C knowledge-base config --local user.name "<desired commit author>"
 git -C knowledge-base config --local user.email "<desired commit email>"
 ```
 
-The publisher rejects parent-repository discovery, bare repositories, detached
-HEAD, merge/rebase/cherry-pick/revert state, missing repository-local author
-values, and a nonempty or unmerged index. An attached unborn branch is valid.
+The publisher rejects the application repository itself, parent-repository
+discovery, bare repositories, detached HEAD, merge/rebase/cherry-pick/revert
+state, missing repository-local author values, and staged, unmerged, or
+intent-to-add index entries. A distinct nested knowledge-base repository and
+an attached unborn branch are valid.
 Every Git command applies `safe.directory` only for that command, disables
 terminal prompting, strips inherited Git repository-redirection variables by
 using a minimal environment, has a timeout, and uses argument arrays rather
