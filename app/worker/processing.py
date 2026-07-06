@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker
 from app.db.models import Artifact
 from app.db.models import ProcessingTask
 from app.db.session import get_session_factory
+from app.knowledge.errors import AtomicPublicationError
 from app.knowledge.errors import ArtifactConsistencyError
 from app.knowledge.errors import DuplicateArtifactRaceError
 from app.knowledge.errors import FileConflictError
@@ -31,6 +32,7 @@ from app.knowledge.errors import KnowledgeBaseInvariantError
 from app.knowledge.errors import KnowledgeBaseOperationalError
 from app.knowledge.errors import ProcessingTransactionError
 from app.knowledge.errors import SourceMessageError
+from app.knowledge.errors import TemporaryFileCleanupError
 from app.knowledge.errors import UnsupportedFileEntryError
 from app.knowledge.git_publication import publish_artifact_to_git
 from app.knowledge.markdown import ARTIFACT_TYPE
@@ -87,7 +89,11 @@ def parse_processing_task_id(value: str) -> uuid.UUID:
     return task_id
 
 
-def sanitize_processing_error(error: Exception) -> str:
+def sanitize_processing_error(
+    error: Exception,
+    *,
+    task_type: str | None = None,
+) -> str:
     if isinstance(error, SourceMessageError):
         summary = "SourceMessageError: source message contract violation"
     elif isinstance(error, ArtifactConsistencyError):
@@ -98,6 +104,17 @@ def sanitize_processing_error(error: Exception) -> str:
         summary = "UnsupportedFileEntryError: unsupported artifact filesystem entry"
     elif isinstance(error, ProcessingTransactionError):
         summary = "ProcessingTransactionError: processing transaction contract violation"
+    elif task_type == TASK_TYPE_GENERATE_NOTE and isinstance(
+        error,
+        (
+            KnowledgeBaseInvariantError,
+            KnowledgeBaseOperationalError,
+        ),
+    ):
+        if isinstance(error, (AtomicPublicationError, TemporaryFileCleanupError)):
+            summary = f"{type(error).__name__}: knowledge-base operation failed"
+        else:
+            summary = "KnowledgeBaseError: knowledge-base operation failed"
     elif isinstance(error, GitPublicationBusyError):
         summary = "GitPublicationBusyError: Git publication already in progress"
     elif isinstance(error, GitPublicationInvariantError):
@@ -229,7 +246,10 @@ async def finalize_processing_task(
     if error is None:
         values.update(status=TASK_STATUS_SUCCEEDED, last_error=None)
     else:
-        values["last_error"] = sanitize_processing_error(error)
+        values["last_error"] = sanitize_processing_error(
+            error,
+            task_type=claimed.task_type,
+        )
         if permanent or claimed.attempt >= claimed.max_attempts:
             values["status"] = TASK_STATUS_FAILED
         else:

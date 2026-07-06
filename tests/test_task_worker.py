@@ -19,11 +19,17 @@ from app.db.models import Message
 from app.db.models import ProcessingTask
 from app.db.session import dispose_engine
 from app.db.session import get_session_factory
+from app.knowledge.errors import AtomicPublicationError
+from app.knowledge.errors import FileConflictError
 from app.knowledge.errors import GitPublicationBusyError
 from app.knowledge.errors import GitPublicationInvariantError
 from app.knowledge.errors import GitPublicationOperationalError
+from app.knowledge.errors import KnowledgeBaseError
+from app.knowledge.errors import KnowledgeBaseInvariantError
 from app.knowledge.errors import KnowledgeBaseOperationalError
 from app.knowledge.errors import SourceMessageError
+from app.knowledge.errors import TemporaryFileCleanupError
+from app.knowledge.errors import UnsupportedFileEntryError
 from app.knowledge.git_publication import publish_artifact_to_git
 from app.knowledge.markdown import render_text_note
 from app.knowledge.storage import classify_file
@@ -670,6 +676,13 @@ def test_missing_or_wrong_git_root_fails_permanently(
             "retrying",
             "KnowledgeBaseOperationalError: knowledge-base operation failed",
         ),
+        (
+            KnowledgeBaseInvariantError(
+                "filesystem invariant failed at /secret/root stderr=ghp_token"
+            ),
+            "failed",
+            "KnowledgeBaseInvariantError: knowledge-base contract violation",
+        ),
     ],
 )
 def test_publication_error_types_control_retry_and_sanitization(
@@ -1068,6 +1081,91 @@ def test_operational_failure_uses_postgres_retry_state(
     asyncio.run(run())
 
 
+@pytest.mark.parametrize(
+    ("error", "expected_status", "expected_summary"),
+    [
+        (
+            KnowledgeBaseOperationalError(
+                "transient I/O at /secret/root stderr=ghp_token password=hunter2"
+            ),
+            "retrying",
+            "KnowledgeBaseError: knowledge-base operation failed",
+        ),
+        (
+            KnowledgeBaseInvariantError(
+                "unsafe deterministic path at /secret/root stderr=ghp_token"
+            ),
+            "retrying",
+            "KnowledgeBaseError: knowledge-base operation failed",
+        ),
+        (
+            KnowledgeBaseError(
+                "legacy knowledge-base failure at /secret/root stderr=ghp_token"
+            ),
+            "retrying",
+            "KnowledgeBaseError: knowledge-base operation failed",
+        ),
+        (
+            AtomicPublicationError(
+                "atomic publication failed at /secret/root stderr=ghp_token"
+            ),
+            "retrying",
+            "AtomicPublicationError: knowledge-base operation failed",
+        ),
+        (
+            TemporaryFileCleanupError(
+                "cleanup failed at /secret/root stderr=ghp_token"
+            ),
+            "retrying",
+            "TemporaryFileCleanupError: knowledge-base operation failed",
+        ),
+        (
+            FileConflictError(
+                "conflict at /secret/root stderr=ghp_token password=hunter2"
+            ),
+            "failed",
+            "FileConflictError: deterministic artifact file conflict",
+        ),
+        (
+            UnsupportedFileEntryError(
+                "unsupported entry at /secret/root stderr=ghp_token"
+            ),
+            "failed",
+            "UnsupportedFileEntryError: unsupported artifact filesystem entry",
+        ),
+    ],
+)
+def test_generate_note_knowledge_base_summaries_preserve_task006_contract(
+    tmp_path: Path,
+    error: Exception,
+    expected_status: str,
+    expected_summary: str,
+) -> None:
+    async def run() -> None:
+        task = await create_task()
+
+        async def fail(_session, _message_id, _root):
+            raise error
+
+        await run_processing_task(
+            task.id,
+            knowledge_base_root=tmp_path,
+            processor=fail,
+        )
+
+        current = await load_task(task.id)
+        assert current.status == expected_status
+        assert current.attempts == 1
+        assert current.last_error == expected_summary
+        assert current.lease_expires_at is None
+        assert "/secret" not in current.last_error
+        assert "stderr" not in current.last_error
+        assert "ghp_" not in current.last_error
+        assert "password" not in current.last_error
+
+    asyncio.run(run())
+
+
 def test_task006_filesystem_operational_failure_still_retries(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -1088,7 +1186,7 @@ def test_task006_filesystem_operational_failure_still_retries(
         assert current.status == "retrying"
         assert current.attempts == 1
         assert current.last_error == (
-            "KnowledgeBaseOperationalError: knowledge-base operation failed"
+            "KnowledgeBaseError: knowledge-base operation failed"
         )
         session_factory = get_session_factory()
         async with session_factory() as session:

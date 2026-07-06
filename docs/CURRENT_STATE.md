@@ -159,7 +159,7 @@ the GitHub-hosted clean build is the independent image-build evidence.
 
 Task 012 focused chaining, publication, recovery, configuration, migration,
 CLI, and Task 006/007/011 regression coverage passes with real system Git. The
-complete suite passes 227 tests.
+complete suite passes 235 tests.
 Migration `0004` downgrades to `0003` and re-upgrades while preserving
 User, Message, Artifact, ProcessingTask, and Message-status state; the restored
 publication SHA column remains nullable.
