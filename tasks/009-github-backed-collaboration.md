@@ -2686,3 +2686,25 @@ pilot boundary.
   while private remains unverified. No CI was added, and no merge, default-branch
   push, force-push, branch deletion, secret, generated note, or handoff artifact
   is part of this implementation.
+
+## Correction evidence — replacement PR readiness
+
+Corrected on 2026-07-06 after the repository history rewrite and creation of
+replacement Task 009 PR #2.
+
+* The repository is public again, and the user confirmed that Web Chat verified
+  public access to PR #2. Private-repository connector access remains
+  unverified.
+* PR #1 remains closed and is not reused. Its accepted GitHub-managed residual
+  ref may retain the pre-rewrite personal identifiers, which are not
+  credentials.
+* The rewritten base, contract, and implementation commits are respectively
+  `8ebf5203a8cb9974dea6befb0ca3c6b7ea411c60`,
+  `9f21a38908ff25b6cc33c273e0c70982ff8c7379`, and
+  `5f2d32012d960b1cdc9b80a727ef3d1aca03901d`.
+* The 154-test result remains a supplied local verification claim. No CI is
+  configured, and a completed fresh Compose image build remains unverified in
+  this environment.
+* This bounded correction changes completion/readiness metadata only. It does
+  not alter application behavior, runtime code, tests, migrations, Compose
+  topology, or previously pushed history.

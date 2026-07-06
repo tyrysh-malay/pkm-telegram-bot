@@ -91,9 +91,10 @@ Uncommitted work must be committed and pushed before Handoff Review can inspect
 it. The PR description supplies implementation and verification claims; those
 claims are independent proof only when an available CI check executed them.
 
-Task 009 proved connected review against a public repository. Connector access
-to the same evidence while the repository is private remains unverified and
-must not be inferred from the public pilot.
+The repository is public again, and Web Chat verified public access to the
+replacement Task 009 review PR #2. PR #1 remains closed and is not reused.
+Connector access to the same evidence while the repository is private remains
+unverified and must not be inferred from either public access check.
 
 ## Database test isolation
 
