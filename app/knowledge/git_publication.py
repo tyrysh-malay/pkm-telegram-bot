@@ -1,6 +1,7 @@
 import fcntl
 import os
 import re
+import stat
 import subprocess
 import tempfile
 import uuid
@@ -44,11 +45,21 @@ class _GitRepository:
     def __init__(self, root: Path) -> None:
         try:
             self.root = root.resolve(strict=True)
-        except OSError as exc:
+        except FileNotFoundError as exc:
             raise GitPublicationInvariantError(
-                "knowledge-base root does not exist or is unreadable"
+                "knowledge-base root does not exist"
             ) from exc
-        if not self.root.is_dir():
+        except OSError as exc:
+            raise GitPublicationOperationalError(
+                "knowledge-base root could not be resolved"
+            ) from exc
+        try:
+            root_stat = self.root.lstat()
+        except OSError as exc:
+            raise GitPublicationOperationalError(
+                "knowledge-base root could not be inspected"
+            ) from exc
+        if not stat.S_ISDIR(root_stat.st_mode):
             raise GitPublicationInvariantError("knowledge-base root is not a directory")
 
     def run(
@@ -128,9 +139,13 @@ class _GitRepository:
         top_level_text = self.text("rev-parse", "--show-toplevel")
         try:
             top_level = Path(top_level_text).resolve(strict=True)
-        except OSError as exc:
+        except FileNotFoundError as exc:
             raise GitPublicationInvariantError(
-                "Git repository top-level is unreadable"
+                "Git repository top-level is absent"
+            ) from exc
+        except OSError as exc:
+            raise GitPublicationOperationalError(
+                "Git repository top-level could not be resolved"
             ) from exc
         if top_level != self.root:
             raise GitPublicationInvariantError(

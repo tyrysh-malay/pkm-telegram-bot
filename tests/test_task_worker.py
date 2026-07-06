@@ -19,11 +19,15 @@ from app.db.models import Message
 from app.db.models import ProcessingTask
 from app.db.session import dispose_engine
 from app.db.session import get_session_factory
-from app.knowledge.errors import SourceMessageError
 from app.knowledge.errors import GitPublicationBusyError
 from app.knowledge.errors import GitPublicationInvariantError
+from app.knowledge.errors import GitPublicationOperationalError
+from app.knowledge.errors import KnowledgeBaseOperationalError
+from app.knowledge.errors import SourceMessageError
 from app.knowledge.git_publication import publish_artifact_to_git
 from app.knowledge.markdown import render_text_note
+from app.knowledge.storage import classify_file
+from app.knowledge.storage import resolve_destination
 from app.worker.processing import claim_processing_task
 from app.worker.processing import finalize_processing_task
 from app.worker.processing import parse_processing_task_id
@@ -400,6 +404,245 @@ def test_missing_publication_artifact_fails_permanently(tmp_path: Path) -> None:
     asyncio.run(run())
 
 
+def test_missing_deterministic_publication_file_fails_permanently(
+    tmp_path: Path,
+) -> None:
+    async def run() -> None:
+        initialize_repository(tmp_path)
+        generate = await create_task()
+        session_factory = get_session_factory()
+        async with session_factory() as session:
+            artifact = await worker_processing.process_text_message(
+                session,
+                generate.message_id,
+                tmp_path,
+            )
+        path = tmp_path / artifact.file_path
+        path.unlink()
+        path.parent.rmdir()
+
+        publication = await create_publication_task(generate.message_id)
+        await run_processing_task(
+            publication.id,
+            knowledge_base_root=tmp_path,
+            git_publication_enabled=False,
+        )
+
+        current = await load_task(publication.id)
+        assert current.status == "failed"
+        assert current.attempts == 1
+        assert current.last_error == (
+            "KnowledgeBaseInvariantError: knowledge-base contract violation"
+        )
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize(
+    ("entry_kind", "expected_error"),
+    [
+        ("conflicting", "FileConflictError: deterministic artifact file conflict"),
+        (
+            "unsupported",
+            "UnsupportedFileEntryError: unsupported artifact filesystem entry",
+        ),
+    ],
+)
+def test_conflicting_and_unsupported_publication_files_fail_permanently(
+    tmp_path: Path,
+    entry_kind: str,
+    expected_error: str,
+) -> None:
+    async def run() -> None:
+        initialize_repository(tmp_path)
+        generate = await create_task()
+        session_factory = get_session_factory()
+        async with session_factory() as session:
+            artifact = await worker_processing.process_text_message(
+                session,
+                generate.message_id,
+                tmp_path,
+            )
+        path = tmp_path / artifact.file_path
+        path.unlink()
+        if entry_kind == "conflicting":
+            path.write_text("different deterministic bytes\n")
+        else:
+            path.mkdir()
+
+        publication = await create_publication_task(generate.message_id)
+        await run_processing_task(
+            publication.id,
+            knowledge_base_root=tmp_path,
+            git_publication_enabled=False,
+        )
+
+        current = await load_task(publication.id)
+        assert current.status == "failed"
+        assert current.attempts == 1
+        assert current.last_error == expected_error
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("inspection_target", ["root", "directory", "file"])
+def test_transient_artifact_filesystem_inspection_retries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    inspection_target: str,
+) -> None:
+    async def run() -> None:
+        generate = await create_task()
+        session_factory = get_session_factory()
+        async with session_factory() as session:
+            artifact = await worker_processing.process_text_message(
+                session,
+                generate.message_id,
+                tmp_path,
+            )
+        inspected_path = {
+            "root": tmp_path,
+            "directory": (tmp_path / artifact.file_path).parent,
+            "file": tmp_path / artifact.file_path,
+        }[inspection_target]
+        original_lstat = Path.lstat
+
+        def fail_selected_lstat(path: Path):
+            if path == inspected_path:
+                raise OSError(
+                    "transient filesystem outage at /secret/root stderr=token"
+                )
+            return original_lstat(path)
+
+        monkeypatch.setattr(Path, "lstat", fail_selected_lstat)
+
+        publication = await create_publication_task(generate.message_id)
+
+        async def resolve(_session, _message_id):
+            return artifact.id
+
+        async def inspect_artifact_filesystem(_session, _artifact_id, root):
+            if inspection_target == "file":
+                _, destination = resolve_destination(
+                    root,
+                    artifact.file_path,
+                    create_missing=False,
+                )
+                classify_file(destination, b"expected bytes")
+            else:
+                resolve_destination(
+                    root,
+                    artifact.file_path,
+                    create_missing=False,
+                )
+
+        await run_processing_task(
+            publication.id,
+            knowledge_base_root=tmp_path,
+            artifact_resolver=resolve,
+            publication_processor=inspect_artifact_filesystem,
+            git_publication_enabled=False,
+        )
+
+        current = await load_task(publication.id)
+        assert current.status == "retrying"
+        assert current.attempts == 1
+        assert current.last_error == (
+            "KnowledgeBaseOperationalError: knowledge-base operation failed"
+        )
+        assert "/secret" not in current.last_error
+        assert "stderr" not in current.last_error
+        assert "token" not in current.last_error
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("resolution_target", ["root", "top_level"])
+def test_transient_git_root_resolution_retries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    resolution_target: str,
+) -> None:
+    async def run() -> None:
+        initialize_repository(tmp_path)
+        generate = await create_task()
+        session_factory = get_session_factory()
+        async with session_factory() as session:
+            artifact = await worker_processing.process_text_message(
+                session,
+                generate.message_id,
+                tmp_path,
+            )
+        publication = await create_publication_task(generate.message_id)
+        original_resolve = Path.resolve
+        root_resolve_calls = 0
+
+        def fail_selected_resolve(path: Path, *args, **kwargs):
+            nonlocal root_resolve_calls
+            if path == tmp_path:
+                root_resolve_calls += 1
+                should_fail = (
+                    resolution_target == "root"
+                    or (
+                        resolution_target == "top_level"
+                        and root_resolve_calls == 2
+                    )
+                )
+                if should_fail:
+                    raise OSError(
+                        "transient Git root I/O at /secret/root stderr=token"
+                    )
+            return original_resolve(path, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "resolve", fail_selected_resolve)
+
+        await run_processing_task(
+            publication.id,
+            knowledge_base_root=tmp_path,
+            git_publication_enabled=False,
+        )
+
+        current = await load_task(publication.id)
+        assert current.status == "retrying"
+        assert current.attempts == 1
+        assert current.last_error == (
+            "GitPublicationOperationalError: Git publication operation failed"
+        )
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("root_case", ["missing", "not_git"])
+def test_missing_or_wrong_git_root_fails_permanently(
+    tmp_path: Path,
+    root_case: str,
+) -> None:
+    async def run() -> None:
+        root = tmp_path / root_case
+        if root_case == "not_git":
+            root.mkdir()
+        task = await create_task(task_type=TASK_TYPE_PUBLISH_ARTIFACT)
+
+        async def resolve(_session, _message_id):
+            return uuid.uuid4()
+
+        await run_processing_task(
+            task.id,
+            knowledge_base_root=root,
+            artifact_resolver=resolve,
+            git_publication_enabled=False,
+        )
+
+        current = await load_task(task.id)
+        assert current.status == "failed"
+        assert current.attempts == 1
+        assert current.last_error == (
+            "GitPublicationInvariantError: Git publication contract violation"
+        )
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize(
     ("error", "expected_status", "expected_summary"),
     [
@@ -412,6 +655,20 @@ def test_missing_publication_artifact_fails_permanently(tmp_path: Path) -> None:
             GitPublicationInvariantError("/secret/repository is invalid"),
             "failed",
             "GitPublicationInvariantError: Git publication contract violation",
+        ),
+        (
+            GitPublicationOperationalError(
+                "git failed at /secret/root stderr=ghp_token password=hunter2"
+            ),
+            "retrying",
+            "GitPublicationOperationalError: Git publication operation failed",
+        ),
+        (
+            KnowledgeBaseOperationalError(
+                "filesystem failed at /secret/root stderr=ghp_token"
+            ),
+            "retrying",
+            "KnowledgeBaseOperationalError: knowledge-base operation failed",
         ),
     ],
 )
@@ -441,6 +698,9 @@ def test_publication_error_types_control_retry_and_sanitization(
         assert current.status == expected_status
         assert current.last_error == expected_summary
         assert "/secret" not in current.last_error
+        assert "stderr" not in current.last_error
+        assert "ghp_" not in current.last_error
+        assert "password" not in current.last_error
 
     asyncio.run(run())
 
@@ -804,6 +1064,46 @@ def test_operational_failure_uses_postgres_retry_state(
         assert current.lease_expires_at is None
         if expected_status == "retrying":
             assert current.available_at >= before + timedelta(seconds=5)
+
+    asyncio.run(run())
+
+
+def test_task006_filesystem_operational_failure_still_retries(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def run() -> None:
+        task = await create_task()
+
+        def fail_open(*_args, **_kwargs):
+            raise PermissionError(
+                "temporary generation I/O failure at /secret/root token=do-not-store"
+            )
+
+        monkeypatch.setattr("app.knowledge.storage.os.open", fail_open)
+
+        await run_processing_task(task.id, knowledge_base_root=tmp_path)
+
+        current = await load_task(task.id)
+        assert current.status == "retrying"
+        assert current.attempts == 1
+        assert current.last_error == (
+            "KnowledgeBaseOperationalError: knowledge-base operation failed"
+        )
+        session_factory = get_session_factory()
+        async with session_factory() as session:
+            artifact_count = await session.scalar(
+                select(func.count())
+                .select_from(Artifact)
+                .where(Artifact.message_id == task.message_id)
+            )
+            message_status = await session.scalar(
+                select(Message.status).where(Message.id == task.message_id)
+            )
+        assert artifact_count == 0
+        assert message_status == "received"
+        assert "/secret" not in current.last_error
+        assert "token" not in current.last_error
 
     asyncio.run(run())
 

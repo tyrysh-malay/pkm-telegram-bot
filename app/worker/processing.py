@@ -27,6 +27,8 @@ from app.knowledge.errors import GitPublicationOperationalError
 from app.knowledge.errors import GitPublicationTransactionError
 from app.knowledge.errors import KnowledgeArtifactError
 from app.knowledge.errors import KnowledgeBaseError
+from app.knowledge.errors import KnowledgeBaseInvariantError
+from app.knowledge.errors import KnowledgeBaseOperationalError
 from app.knowledge.errors import ProcessingTransactionError
 from app.knowledge.errors import SourceMessageError
 from app.knowledge.errors import UnsupportedFileEntryError
@@ -102,6 +104,10 @@ def sanitize_processing_error(error: Exception) -> str:
         summary = "GitPublicationInvariantError: Git publication contract violation"
     elif isinstance(error, GitPublicationOperationalError):
         summary = "GitPublicationOperationalError: Git publication operation failed"
+    elif isinstance(error, KnowledgeBaseInvariantError):
+        summary = "KnowledgeBaseInvariantError: knowledge-base contract violation"
+    elif isinstance(error, KnowledgeBaseOperationalError):
+        summary = "KnowledgeBaseOperationalError: knowledge-base operation failed"
     elif isinstance(error, SQLAlchemyError):
         summary = f"{type(error).__name__}: database operation failed"
     elif isinstance(error, (KnowledgeBaseError, OSError)):
@@ -319,7 +325,7 @@ async def run_processing_task(
                     GitPublicationInvariantError,
                     SourceMessageError,
                     ArtifactConsistencyError,
-                    KnowledgeBaseError,
+                    KnowledgeBaseInvariantError,
                 ),
             )
         else:

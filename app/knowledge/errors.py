@@ -14,19 +14,27 @@ class KnowledgeBaseError(KnowledgeArtifactError):
     """The configured knowledge-base filesystem cannot establish an exact file."""
 
 
-class FileConflictError(KnowledgeBaseError):
+class KnowledgeBaseInvariantError(KnowledgeBaseError):
+    """Knowledge-base data or paths violate deterministic artifact invariants."""
+
+
+class KnowledgeBaseOperationalError(KnowledgeBaseError):
+    """A retryable knowledge-base filesystem operation could not complete."""
+
+
+class FileConflictError(KnowledgeBaseInvariantError):
     """A regular file exists at the expected path with different bytes."""
 
 
-class UnsupportedFileEntryError(KnowledgeBaseError):
+class UnsupportedFileEntryError(KnowledgeBaseInvariantError):
     """A non-regular filesystem entry exists at the expected path."""
 
 
-class AtomicPublicationError(KnowledgeBaseError):
+class AtomicPublicationError(KnowledgeBaseOperationalError):
     """The filesystem cannot provide the required no-replace publication."""
 
 
-class TemporaryFileCleanupError(KnowledgeBaseError):
+class TemporaryFileCleanupError(KnowledgeBaseOperationalError):
     """A publication temporary file could not be removed."""
 
 

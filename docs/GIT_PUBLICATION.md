@@ -26,8 +26,9 @@ single existing note Artifact through its `message_id`, closes that read
 transaction, and calls the same `publish_artifact_to_git(...)` function used by
 the manual CLI with a fresh session. Missing or inconsistent artifacts and
 deterministic repository violations fail permanently. Typed operational
-failures, including repository-lock contention, Git execution failures, and
-database failures, use the existing bounded ProcessingTask retries.
+failures, including temporary filesystem inspection failures, repository-lock
+contention, Git execution failures, and database failures, use the existing
+bounded ProcessingTask retries.
 
 Manual publication before automatic execution returns `existing` without a
 second commit. A commit retained after database failure is reconciled on the
