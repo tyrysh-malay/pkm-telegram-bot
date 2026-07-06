@@ -19,6 +19,7 @@ Local verification results below are Codex-supplied claims.
 ## GitHub Actions verification
 
 Workflow/job name:
+Observed check context:
 Run ID or URL:
 Tested head SHA:
 CI conclusion:

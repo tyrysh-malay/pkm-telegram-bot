@@ -92,10 +92,11 @@ curl http://localhost:8000/ready
 
 ## Continuous integration
 
-GitHub Actions runs the `CI / Test` workflow job for every pull request
-targeting `main` and every push to `main`. It validates the committed patch,
-builds the development app image through Docker Compose, starts only
-PostgreSQL, and runs the complete pytest suite in a one-off app container.
+GitHub Actions runs one workflow and job for every pull request targeting
+`main` and every push to `main`. The observed pull-request check context is
+`CI / Test`. It validates the committed patch, builds the development app image
+through Docker Compose, starts only PostgreSQL, and runs the complete pytest
+suite in a one-off app container.
 
 CI uses separate disposable `pkm` and `pkm_test` databases. Pytest creates the
 test database and applies the committed Alembic migrations. Telegram polling,
