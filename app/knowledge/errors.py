@@ -36,3 +36,11 @@ class ProcessingTransactionError(KnowledgeArtifactError):
 
 class DuplicateArtifactRaceError(KnowledgeArtifactError):
     """A duplicate race did not reconcile to one valid artifact."""
+
+
+class GitPublicationError(KnowledgeArtifactError):
+    """A validated artifact cannot be published safely to local Git."""
+
+
+class GitPublicationTransactionError(GitPublicationError):
+    """The supplied session cannot own the publication transaction."""

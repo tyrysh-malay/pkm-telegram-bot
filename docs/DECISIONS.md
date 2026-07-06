@@ -1136,6 +1136,51 @@ would add cost without increasing coverage.
 
 ---
 
+## D-030 — Publish one validated Artifact through an explicit local Git commit
+
+**Decision**
+
+Use one manual Artifact-UUID CLI and reusable publication function. Require
+`KNOWLEDGE_BASE_PATH` to be the exact initialized Git top-level, an attached
+named branch, repository-local author identity, and an empty index. Preserve
+unrelated unstaged state, stage only the selected validated path, and record the
+full commit object ID in nullable `Artifact.git_commit_sha`.
+
+Serialize each repository with a Git-private filesystem lock and protect the
+Artifact with PostgreSQL `FOR UPDATE`. Use stable Artifact-ID and path trailers
+to reconcile a commit retained after database failure.
+
+**Context or problem**
+
+Task 006 established deterministic files and Artifact rows, but Git and
+PostgreSQL cannot commit atomically. Automatic worker commits would also mix
+repository ownership, duplicate delivery, unrelated index state, and remote
+synchronization into the processing lifecycle.
+
+**Reasoning**
+
+A manual, local-only boundary proves byte identity, index isolation,
+idempotency, and cross-resource recovery without changing Task 006 or the
+worker. Requiring a clean index and exact root makes ownership explicit while
+still allowing unrelated unstaged and untracked work.
+
+**Consequences**
+
+* Task 006 rendering, file reconciliation, and Message status behavior remain
+  unchanged.
+* The application never initializes Git, selects a branch, configures an
+  author, or invokes publication automatically.
+* Hooks are disabled and no remote Git operation is available.
+* A retained exact commit is reconciled rather than reset or duplicated.
+* Bulk publication, remote synchronization, queues, retries, and publication
+  history remain outside this decision.
+
+**Status:** accepted
+
+**Related task:** Task 011
+
+---
+
 # Possible future ADR split
 
 If this file becomes too large, the following decisions are good candidates for individual ADR files:

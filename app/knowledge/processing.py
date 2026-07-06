@@ -10,12 +10,18 @@ from app.db.models import Artifact
 from app.db.models import Message
 from app.knowledge.errors import ArtifactConsistencyError
 from app.knowledge.errors import DuplicateArtifactRaceError
+from app.knowledge.errors import FileConflictError
+from app.knowledge.errors import KnowledgeBaseError
 from app.knowledge.errors import ProcessingTransactionError
 from app.knowledge.errors import SourceMessageError
+from app.knowledge.errors import UnsupportedFileEntryError
 from app.knowledge.markdown import ARTIFACT_TYPE
 from app.knowledge.markdown import RenderedNote
 from app.knowledge.markdown import render_text_note
+from app.knowledge.storage import FileState
+from app.knowledge.storage import classify_file
 from app.knowledge.storage import ensure_exact_file
+from app.knowledge.storage import resolve_destination
 
 
 ARTIFACT_UNIQUENESS_CONSTRAINTS = {
@@ -83,6 +89,54 @@ def _validate_artifact(
         raise ArtifactConsistencyError(
             f"message {message_id} artifact metadata mismatch: {', '.join(mismatches)}"
         )
+
+
+async def validate_existing_artifact(
+    session: AsyncSession,
+    artifact_id: uuid.UUID,
+    knowledge_base_root: Path,
+    *,
+    for_update: bool = False,
+) -> tuple[Artifact, bytes]:
+    statement = select(Artifact).where(Artifact.id == artifact_id)
+    if for_update:
+        statement = statement.with_for_update()
+    artifact = await session.scalar(statement)
+    if artifact is None:
+        raise ArtifactConsistencyError(f"artifact {artifact_id} was not found")
+
+    message = await session.scalar(
+        select(Message).where(Message.id == artifact.message_id)
+    )
+    if message is None:
+        raise SourceMessageError(
+            f"artifact {artifact_id} source message {artifact.message_id} was not found"
+        )
+
+    expected = _validate_source_message(message, message.id)
+    _validate_artifact(artifact, message.id, expected)
+
+    _, destination = resolve_destination(
+        knowledge_base_root,
+        artifact.file_path,
+        create_missing=False,
+    )
+    state = classify_file(destination, expected.content)
+    if state is FileState.ABSENT:
+        raise KnowledgeBaseError(
+            f"artifact file is absent at {artifact.file_path}"
+        )
+    if state is FileState.CONFLICTING:
+        raise FileConflictError(
+            f"conflicting file exists at artifact path {artifact.file_path}"
+        )
+    if state is FileState.UNSUPPORTED:
+        raise UnsupportedFileEntryError(
+            "unsupported filesystem entry exists at artifact path "
+            f"{artifact.file_path}"
+        )
+
+    return artifact, expected.content
 
 
 async def _process_attempt(

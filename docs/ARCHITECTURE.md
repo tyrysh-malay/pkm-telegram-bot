@@ -62,6 +62,31 @@ be attached to a new row on the next explicit invocation; a valid row with a
 missing file can recreate it. Conflicting files and inconsistent rows fail
 without replacement or silent repair.
 
+## Manual Git-publication boundary
+
+Task 011 adds a separate developer-invoked stage:
+
+```text
+existing valid Artifact + exact established file
+    |
+    v
+manual Git publisher
+    |
+    +--> one local selected-path commit
+    +--> Artifact.git_commit_sha
+```
+
+The publisher locks the Artifact row and takes one repository-wide filesystem
+lock while validating Git state, committing, and finalizing PostgreSQL. It
+reuses Task 006 rendering and metadata rules only to validate the existing
+Artifact and bytes; it never creates or repairs a note and is not called by the
+app dispatcher or worker.
+
+Git and PostgreSQL do not share a transaction. A commit that survives a failed
+database update remains valid local history and is reconciled on the next
+manual invocation through stable Artifact-ID and path trailers. No Git remote
+operation is part of this boundary.
+
 ## Components
 
 ### App process
@@ -103,9 +128,11 @@ knowledge-base/
   inbox/
 ```
 
-Compose bind-mounts this directory from the host. Publication uses a fully
+Compose bind-mounts this directory from the host. File publication uses a fully
 written same-directory temporary file and a hard-link no-replace operation.
-Git commits are not automated.
+Manual Git publication additionally requires this exact directory to be an
+initialized non-bare Git top-level with an attached branch and repository-local
+author identity. Git commits are not automated.
 
 ### Worker and Redis
 
@@ -135,5 +162,5 @@ Not implemented:
 
 * AI generation;
 * voice, image, link, file, or PDF processing;
-* Git commits or synchronization;
+* automatic Git commits or remote synchronization;
 * LangChain, LangGraph, vector databases, RAG, microservices, or Kubernetes.

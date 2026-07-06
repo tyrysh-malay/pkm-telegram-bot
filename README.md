@@ -11,6 +11,7 @@ Docker Compose, and tests.
 
 * Python 3.11+
 * Docker Compose, optional but recommended
+* Git (installed in the shared app/worker development image)
 
 ## Local setup
 
@@ -205,6 +206,51 @@ Telegram's `Saved for processing.` acknowledgement means that the Message and
 task were durably persisted, not that processing completed. There is no
 worker-to-Telegram completion notification, AI processing, or Git automation.
 See `docs/MARKDOWN_ARTIFACTS.md` for rendering and recovery behavior.
+
+## Manual Git publication
+
+Git publication is a separate developer action. Initialize the configured
+knowledge-base root explicitly and set a repository-local identity; the
+application never initializes a repository or changes branches:
+
+```bash
+git -C knowledge-base init
+git -C knowledge-base config --local user.name "<desired commit author>"
+git -C knowledge-base config --local user.email "<desired commit email>"
+```
+
+`KNOWLEDGE_BASE_PATH` must resolve to that repository's exact top-level and
+must not be the application repository itself. A distinct nested
+`knowledge-base/` repository is supported; discovering only the application or
+another parent repository is rejected. The current branch must be attached (an
+unborn named branch is allowed), repository-local author values must be
+nonblank, and the Git index must have no staged, unmerged, or intent-to-add
+entries. Unrelated unstaged and untracked files are allowed and preserved.
+
+After migrations are current and an Artifact's deterministic file already
+exists, publish one Artifact UUID:
+
+```bash
+docker compose exec app \
+  python -m app.knowledge.git_cli --artifact-id <artifact-uuid>
+```
+
+Success prints exactly:
+
+```text
+artifact_id: <artifact-uuid>
+file_path: <repository-relative-path>
+git_commit_sha: <full-commit-sha>
+outcome: created|reconciled|existing
+```
+
+The command validates Task 006 metadata and bytes, stages only the selected
+path, creates one local commit, and stores its SHA. It disables repository
+hooks and performs no clone, fetch, pull, push, remote configuration, or
+worker/ingestion integration. If the Git commit succeeds but the database
+update fails, the commit is retained; rerunning reconciles its stable Artifact
+trailers without creating a second commit. See `docs/GIT_PUBLICATION.md` for
+the complete safety and recovery boundary.
 
 ## Environment variables
 

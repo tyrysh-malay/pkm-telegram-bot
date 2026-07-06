@@ -45,7 +45,7 @@ def test_migrations_created_users_messages_and_artifacts_tables() -> None:
     asyncio.run(run())
 
 
-def test_artifacts_table_has_only_task006_business_columns() -> None:
+def test_artifacts_table_has_expected_business_columns() -> None:
     async def run() -> None:
         async with get_engine().connect() as connection:
             result = await connection.execute(
@@ -65,6 +65,7 @@ def test_artifacts_table_has_only_task006_business_columns() -> None:
             "file_path",
             "created_at",
             "updated_at",
+            "git_commit_sha",
         ]
 
     asyncio.run(run())
