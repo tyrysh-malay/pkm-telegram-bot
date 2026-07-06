@@ -45,20 +45,26 @@ Do not split the MVP into multiple repositories or services.
 
 Before implementing a task:
 
-1. Inspect the current branch, HEAD, status, recent commits, and diff.
-2. Read the active task, `docs/CURRENT_STATE.md`, `docs/WORKFLOW.md`, and every
-   document referenced by the task.
-3. Inspect relevant live code, tests, configuration, and repository structure
-   before trusting documentation. Distinguish verified facts from stale or
-   aspirational claims and report contradictions.
-4. Present a concise implementation plan before editing.
-5. Make the smallest in-scope change. Avoid postponed functionality,
-   speculative abstractions, and unrelated refactoring.
-6. Add or update tests, then run the task's acceptance verification.
+1. Inspect the current branch, HEAD, status, remotes, expected default-branch
+   relationship, recent commits, and current diff.
+2. Confirm the active task branch is based on the expected pushed default
+   branch and contains no unrelated work.
+3. Read the task contract at the exact recorded contract commit, then read
+   `docs/CURRENT_STATE.md`, `docs/WORKFLOW.md`, and every referenced document.
+4. Inspect relevant live code, tests, configuration, and repository structure
+   before trusting documentation. Report contradictions before editing.
+5. Present a concise implementation plan, then make the smallest in-scope
+   change without speculative abstractions or unrelated refactoring.
+6. Add or update tests and run the task's required acceptance verification.
 7. Update affected documentation only after behavior is verified.
-8. Protect secrets and do not expose local configuration values.
-9. Do not commit unless explicitly instructed.
-10. Produce the completion report required by the active task.
+8. Update the pull-request description with supplied verification claims and
+   identify the exact pushed head under review.
+9. Protect secrets and leave unrelated local changes untouched.
+
+Codex may create commits or push only when the active task or user explicitly
+authorizes the exact branch and commit boundary. Push only the authorized task
+branch. Never push directly to the default branch, merge a pull request, or
+force-push reviewed work without separate explicit authorization.
 
 The complete lifecycle, conversation responsibilities, source-of-truth rules,
 and documentation update matrix are in `docs/WORKFLOW.md`.

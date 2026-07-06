@@ -1,7 +1,7 @@
 # Current Project State
 
-This document describes the current semantic state of the repository. Generated
-context reports and Git commands provide branch, commit, recent-commit, and
+This document describes the current semantic state of the repository. Live Git
+and pull-request inspection provide branch, commit, review-head, and
 working-tree facts.
 
 **Active task:** none selected
@@ -62,7 +62,7 @@ runtime allowlist administration
 group, supergroup, or channel ingestion
 ```
 
-## Repository workflow and review reporting
+## Repository workflow and pull-request review
 
 The repository-local workflow documentation is:
 
@@ -76,46 +76,25 @@ The reusable task specification template is:
 tasks/TEMPLATE.md
 ```
 
-The read-only project context report command is:
+The collaboration boundaries are:
 
-```bash
-python3 scripts/project_context.py
+```text
+pushed default branch = accepted shared baseline
+pushed task branch + PR = active shared review state
+local working tree = Codex-only uncommitted state
+task contract = exact task path at recorded contract SHA
+PR head SHA = exact implementation state under review
 ```
 
-The command prints Markdown to standard output. It uses read-only Git queries
-and whitelisted task/document metadata, writes nothing, does not read `.env` or
-environment variables, and redacts secret-like changed-path names.
+One bounded task uses one authorized task branch and one pull request.
+Uncommitted work must be committed and pushed before Handoff Review can inspect
+it. The PR description supplies implementation and verification claims; those
+claims are independent proof only when an available CI check executed them.
 
-To create a handoff file outside the repository:
-
-```bash
-mkdir -p "$HOME/pkm-handoffs"
-python3 scripts/project_context.py > "$HOME/pkm-handoffs/pkm-project-context.md"
-```
-
-Generated reports are point-in-time snapshots. The live repository remains the
-source of truth.
-
-For a complete implementation-review handoff, Codex first creates the explicit
-completion report outside the repository and then runs:
-
-```bash
-python3 scripts/review_bundle.py \
-  --task tasks/<active-task>.md \
-  --report "$HOME/pkm-handoffs/<task>-handoff.md" \
-  > "$HOME/pkm-handoffs/<task>-review-bundle.md"
-```
-
-The review bundle reads the committed task contract from `HEAD`, captures the
-complete safe tracked diff and non-ignored untracked text files, and includes
-deterministic changed-file and evidence manifests. It fails before stdout output
-for ignored, secret-like, unsupported, inconsistent, or oversized evidence. It
-does not write repository files, use the network, upload, or run the verification
-claims in the supplied completion report.
-
-The compact context report remains the metadata-oriented command; the review
-bundle is the separate full implementation-evidence command. Both outputs are
-point-in-time snapshots and must be regenerated after their source state changes.
+The repository is public again, and Web Chat verified public access to the
+replacement Task 009 review PR #2. PR #1 remains closed and is not reused.
+Connector access to the same evidence while the repository is private remains
+unverified and must not be inferred from either public access check.
 
 ## Database test isolation
 
@@ -140,9 +119,20 @@ database.
 
 ## Verification notes
 
-The development image includes Git and copies the complete `scripts/` and
-`tests/` directories. Repository-aware commands still require execution in a
-Git work tree; `.git` is intentionally absent from the image build context.
+The development image copies the complete application test suite. Repository
+collaboration runs from the host checkout rather than from the application
+image, whose build context intentionally excludes `.git`.
+
+Task 009 structural, historical-preservation, active-reference, and application
+scope checks passed. The 154-test application suite passed from the current
+source and reduced test tree mounted read-only into the established development
+image. In-container `/health` and `/ready` checks returned `200`.
+
+A fresh Compose image build reached the dependency-install step but stalled on
+the known Docker/VPN bridge path. A host-network fallback downloaded most
+dependencies before PyPI timed out while transferring `uvloop`. The final image
+definition and Compose configuration were validated, but a completed fresh
+image build remains unverified in this environment.
 
 Task 008 authorization and ingestion coverage passed 44 focused tests, and 91
 focused Task 006/007 processing regressions passed unchanged. The full suite
