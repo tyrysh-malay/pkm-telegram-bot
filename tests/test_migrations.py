@@ -164,3 +164,107 @@ def test_processing_task_migration_preserves_sources_and_does_not_backfill() -> 
         asyncio.run(dispose_engine())
         command.upgrade(config, "head")
         asyncio.run(dispose_engine())
+
+
+def test_git_commit_sha_migration_downgrade_and_reupgrade_preserves_state() -> None:
+    user_id = uuid.uuid4()
+    message_id = uuid.uuid4()
+    artifact_id = uuid.uuid4()
+    task_id = uuid.uuid4()
+
+    async def seed() -> None:
+        session_factory = get_session_factory()
+        async with session_factory() as session:
+            session.add(
+                User(
+                    id=user_id,
+                    telegram_user_id=uuid.uuid4().int
+                    % 9_000_000_000_000_000_000,
+                )
+            )
+            session.add(
+                Message(
+                    id=message_id,
+                    user_id=user_id,
+                    telegram_chat_id=3,
+                    telegram_message_id=3,
+                    input_type="text",
+                    raw_text="git migration source",
+                    status="done",
+                    idempotency_key=f"migration:{message_id}",
+                )
+            )
+            session.add(
+                Artifact(
+                    id=artifact_id,
+                    message_id=message_id,
+                    artifact_type="note",
+                    title="Git migration",
+                    slug="git-migration",
+                    file_path=f"inbox/{message_id}.md",
+                )
+            )
+            session.add(
+                ProcessingTask(
+                    id=task_id,
+                    message_id=message_id,
+                    status="succeeded",
+                )
+            )
+            await session.commit()
+
+    async def state() -> tuple[bool, int, int, int, int, str]:
+        async with get_engine().connect() as connection:
+            sha_column = await connection.scalar(
+                text(
+                    "SELECT count(*) FROM information_schema.columns "
+                    "WHERE table_schema = 'public' AND table_name = 'artifacts' "
+                    "AND column_name = 'git_commit_sha'"
+                )
+            )
+            counts = []
+            for table, identifier in (
+                ("users", user_id),
+                ("messages", message_id),
+                ("artifacts", artifact_id),
+                ("processing_tasks", task_id),
+            ):
+                counts.append(
+                    await connection.scalar(
+                        text(f"SELECT count(*) FROM {table} WHERE id = :id"),
+                        {"id": identifier},
+                    )
+                )
+            status = await connection.scalar(
+                text("SELECT status FROM messages WHERE id = :id"),
+                {"id": message_id},
+            )
+        return bool(sha_column), *counts, status
+
+    asyncio.run(seed())
+    asyncio.run(dispose_engine())
+    config = Config("alembic.ini")
+
+    try:
+        assert asyncio.run(state()) == (True, 1, 1, 1, 1, "done")
+        command.downgrade(config, "0003")
+        asyncio.run(dispose_engine())
+        assert asyncio.run(state()) == (False, 1, 1, 1, 1, "done")
+
+        command.upgrade(config, "0004")
+        asyncio.run(dispose_engine())
+        assert asyncio.run(state()) == (True, 1, 1, 1, 1, "done")
+
+        async def sha_value() -> str | None:
+            async with get_engine().connect() as connection:
+                return await connection.scalar(
+                    text("SELECT git_commit_sha FROM artifacts WHERE id = :id"),
+                    {"id": artifact_id},
+                )
+
+        asyncio.run(dispose_engine())
+        assert asyncio.run(sha_value()) is None
+    finally:
+        asyncio.run(dispose_engine())
+        command.upgrade(config, "head")
+        asyncio.run(dispose_engine())

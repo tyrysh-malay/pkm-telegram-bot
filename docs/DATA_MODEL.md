@@ -1,7 +1,8 @@
 # Data Model
 
 PostgreSQL stores operational state. Markdown files under the configured
-knowledge-base root are the human-readable artifacts; Git history is postponed.
+knowledge-base root are the human-readable artifacts. A nullable Artifact field
+records one validated local publication commit; remote Git state is postponed.
 Alembic migrations, not runtime `create_all()`, own the schema.
 
 ## User
@@ -58,6 +59,7 @@ artifact_type      TEXT not null
 title              TEXT not null
 slug               TEXT not null
 file_path          TEXT not null
+git_commit_sha     TEXT nullable
 created_at         TIMESTAMPTZ not null
 updated_at         TIMESTAMPTZ not null
 ```
@@ -74,7 +76,14 @@ text rather than an enum or type check. `file_path` is a POSIX path relative to
 `KNOWLEDGE_BASE_PATH`. Title and slug are deterministic metadata but do not
 identify the file. The message relation has no artifact cascade-delete policy.
 
-The table deliberately has no summary, tags, topics, Git SHA, version, content
+`git_commit_sha = NULL` means no publication commit has been successfully
+recorded in PostgreSQL. A non-null value is a canonical full hexadecimal object
+ID for one locally validated commit whose trailers, path, and blob match this
+Artifact. The field has no index or uniqueness constraint and does not model a
+branch, remote, synchronization status, retry, or publication history. If a
+commit survives a database failure, a later manual invocation can reconcile it.
+
+The table deliberately has no summary, tags, topics, version, content
 hash, processing-task reference, or generic metadata field. Frontmatter tags
 and topics are empty format fields, not database columns.
 
@@ -137,13 +146,13 @@ text at database level.
 
 ## Postponed entities
 
-`processing_events`, artifact history, and Git commit metadata are not
-implemented.
+`processing_events`, artifact history, branch/remote state, and publication
+attempt models are not implemented.
 
 ## Source ownership
 
 ```text
 operational state        PostgreSQL
 human-readable artifact Markdown file
-repository history       Git (not yet automated)
+repository history       local Git (manual publication only)
 ```

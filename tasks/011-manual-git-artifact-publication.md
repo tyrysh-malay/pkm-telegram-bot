@@ -1,6 +1,6 @@
 # Task 011: Add a manual Git commit boundary for generated artifacts
 
-**Status:** planned
+**Status:** ready for review
 **Depends on:** Tasks 000–010 and completion of the standalone Task 010 status correction
 **Target file:** `tasks/011-manual-git-artifact-publication.md`
 **Expected branch:** `task/011-manual-git-artifact-publication`

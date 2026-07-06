@@ -23,6 +23,8 @@ class FileState(Enum):
 def resolve_destination(
     knowledge_base_root: Path,
     relative_path: str,
+    *,
+    create_missing: bool = True,
 ) -> tuple[Path, Path]:
     raw_parts = relative_path.split("/")
     if (
@@ -35,11 +37,13 @@ def resolve_destination(
         )
 
     try:
-        root = knowledge_base_root.resolve(strict=False)
-        root.mkdir(parents=True, exist_ok=True)
+        root = knowledge_base_root.resolve(strict=not create_missing)
+        if create_missing:
+            root.mkdir(parents=True, exist_ok=True)
     except OSError as exc:
+        action = "create" if create_missing else "resolve"
         raise KnowledgeBaseError(
-            f"cannot create knowledge-base root {knowledge_base_root}"
+            f"cannot {action} knowledge-base root {knowledge_base_root}"
         ) from exc
 
     try:
@@ -58,6 +62,10 @@ def resolve_destination(
     try:
         parent_stat = parent.lstat()
     except FileNotFoundError:
+        if not create_missing:
+            raise KnowledgeBaseError(
+                f"artifact directory is absent for {relative_path}"
+            )
         try:
             parent.mkdir()
             parent_stat = parent.lstat()

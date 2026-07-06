@@ -150,6 +150,48 @@ def test_artifact_constraints_and_message_relation() -> None:
 
         assert result is not None
         assert result.message_id == message.id
+        assert result.git_commit_sha is None
+
+    asyncio.run(run())
+
+
+def test_artifact_git_commit_sha_can_store_full_object_id() -> None:
+    async def run() -> None:
+        session_factory = get_session_factory()
+        telegram_user_id = random_telegram_id()
+        commit_sha = "a" * 64
+
+        async with session_factory() as session:
+            user = User(telegram_user_id=telegram_user_id)
+            session.add(user)
+            await session.flush()
+            message = Message(
+                user_id=user.id,
+                telegram_chat_id=telegram_user_id,
+                telegram_message_id=30,
+                input_type="text",
+                raw_text="published artifact",
+                status="done",
+                idempotency_key=f"telegram:{telegram_user_id}:30",
+            )
+            session.add(message)
+            await session.flush()
+            artifact = Artifact(
+                message_id=message.id,
+                artifact_type="note",
+                title="Published",
+                slug="published",
+                file_path="inbox/published.md",
+                git_commit_sha=commit_sha,
+            )
+            session.add(artifact)
+            await session.commit()
+
+            stored = await session.scalar(
+                select(Artifact.git_commit_sha).where(Artifact.id == artifact.id)
+            )
+
+        assert stored == commit_sha
 
     asyncio.run(run())
 

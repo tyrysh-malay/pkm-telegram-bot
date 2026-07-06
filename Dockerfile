@@ -4,6 +4,10 @@ WORKDIR /app
 
 ARG INSTALL_DEV=false
 
+RUN apt-get update \
+    && apt-get install --yes --no-install-recommends git \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY pyproject.toml README.md docker-compose.yml ./
 COPY app ./app
 COPY alembic ./alembic

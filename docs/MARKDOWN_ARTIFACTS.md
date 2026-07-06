@@ -146,3 +146,15 @@ Success prints the stable Artifact ID and relative path. The command loads the
 normal database and `KNOWLEDGE_BASE_PATH` settings but does not start Telegram,
 FastAPI, polling, a queue, or a worker. Processing is not automatic, and no Git
 commit is created.
+
+## Separate Git publication
+
+Task 011 consumes an already valid Artifact and its exact established file.
+It reruns the Task 006 renderer only to calculate validation bytes; it does not
+rerender, recreate, repair, or change the Markdown file, Artifact metadata, or
+Message status. Task 006 paths and format-version-1 bytes remain unchanged.
+
+Publication is manually invoked by Artifact UUID after Task 006 processing and
+is never called automatically by ingestion or the worker. Its repository,
+index, commit, idempotency, and PostgreSQL/Git recovery rules are documented in
+`docs/GIT_PUBLICATION.md`.

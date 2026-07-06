@@ -4,7 +4,7 @@ This document describes the current semantic state of the repository. Live Git
 and pull-request inspection provide branch, commit, review-head, and
 working-tree facts.
 
-**Active task:** `tasks/011-manual-git-artifact-publication.md`
+**Active task:** none selected
 
 ## Working functionality
 
@@ -28,6 +28,12 @@ Confirmed working:
   format-version-1 Markdown notes under `knowledge-base/inbox/`.
 * Artifact metadata is persisted in PostgreSQL, and successful reconciliation
   establishes `Message.status = "done"`.
+* One manual Artifact-UUID CLI validates an existing Artifact and exact file,
+  creates or reconciles one local selected-path Git commit, and persists its
+  full SHA on `Artifact.git_commit_sha`.
+* Manual Git publication requires `KNOWLEDGE_BASE_PATH` to be the exact
+  initialized repository top-level, an attached named branch, repository-local
+  author identity, and an empty index. It preserves unrelated unstaged state.
 * Same-message processing uses PostgreSQL row locking, uniqueness constraints,
   atomic no-replace file publication, and explicit filesystem/database
   reconciliation.
@@ -56,7 +62,8 @@ Not implemented:
 
 ```text
 AI processing
-Git-backed artifact commit
+automatic Git-backed artifact commit
+remote Git synchronization
 Telegram webhook ingestion
 runtime allowlist administration
 group, supergroup, or channel ingestion
@@ -138,15 +145,15 @@ image, whose build context intentionally excludes `.git`.
 
 The `CI / Test` check independently verifies the exact selected source SHA,
 committed patch integrity, Compose configuration, a clean development-image
-build, PostgreSQL readiness, the complete 154-test suite, and unconditional
+build, PostgreSQL readiness, the complete test suite, and unconditional
 cleanup. The local Docker/VPN bridge can still stall a fresh dependency fetch;
 the GitHub-hosted clean build is the independent image-build evidence.
 
-Task 008 authorization and ingestion coverage passed 44 focused tests, and 91
-focused Task 006/007 processing regressions passed unchanged. The full suite
-passed 219 tests. Development counts and stable identity hashes remained
-unchanged at `users=1`, `messages=1`, `artifacts=0`, and
-`processing_tasks=0`.
+Task 011 focused publication, migration, CLI, and Task 006/007 regression
+coverage passes 87 tests with real system Git. The complete suite passes 188
+tests. Migration `0004` downgrades to `0003` and re-upgrades while preserving
+User, Message, Artifact, ProcessingTask, and Message-status state; the restored
+publication SHA column remains nullable.
 
 Disabled Telegram configuration accepts an empty allowlist; enabled
 configuration rejects an empty allowlist and accepts a valid non-empty JSON
@@ -175,7 +182,7 @@ cross-event-loop pooled connections.
 * No image processing.
 * No file or PDF processing.
 * No AI provider integration.
-* No Git-backed artifact commits.
+* No automatic Git-backed artifact commits or remote synchronization.
 * No webhook ingestion.
 * Long polling assumes a single app process when enabled.
 * Telegram owner changes require an app restart; no database-backed permission
