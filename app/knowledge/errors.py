@@ -14,19 +14,27 @@ class KnowledgeBaseError(KnowledgeArtifactError):
     """The configured knowledge-base filesystem cannot establish an exact file."""
 
 
-class FileConflictError(KnowledgeBaseError):
+class KnowledgeBaseInvariantError(KnowledgeBaseError):
+    """Knowledge-base data or paths violate deterministic artifact invariants."""
+
+
+class KnowledgeBaseOperationalError(KnowledgeBaseError):
+    """A retryable knowledge-base filesystem operation could not complete."""
+
+
+class FileConflictError(KnowledgeBaseInvariantError):
     """A regular file exists at the expected path with different bytes."""
 
 
-class UnsupportedFileEntryError(KnowledgeBaseError):
+class UnsupportedFileEntryError(KnowledgeBaseInvariantError):
     """A non-regular filesystem entry exists at the expected path."""
 
 
-class AtomicPublicationError(KnowledgeBaseError):
+class AtomicPublicationError(KnowledgeBaseOperationalError):
     """The filesystem cannot provide the required no-replace publication."""
 
 
-class TemporaryFileCleanupError(KnowledgeBaseError):
+class TemporaryFileCleanupError(KnowledgeBaseOperationalError):
     """A publication temporary file could not be removed."""
 
 
@@ -42,5 +50,17 @@ class GitPublicationError(KnowledgeArtifactError):
     """A validated artifact cannot be published safely to local Git."""
 
 
-class GitPublicationTransactionError(GitPublicationError):
+class GitPublicationInvariantError(GitPublicationError):
+    """Publication data or repository state violates the durable contract."""
+
+
+class GitPublicationOperationalError(GitPublicationError):
+    """Publication failed because a retryable operation could not complete."""
+
+
+class GitPublicationBusyError(GitPublicationOperationalError):
+    """Another publication currently owns the repository lock."""
+
+
+class GitPublicationTransactionError(GitPublicationInvariantError):
     """The supplied session cannot own the publication transaction."""

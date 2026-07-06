@@ -204,8 +204,16 @@ the note to Git.
 
 Telegram's `Saved for processing.` acknowledgement means that the Message and
 task were durably persisted, not that processing completed. There is no
-worker-to-Telegram completion notification, AI processing, or Git automation.
+worker-to-Telegram completion notification or AI processing.
 See `docs/MARKDOWN_ARTIFACTS.md` for rendering and recovery behavior.
+
+Set `GIT_PUBLICATION_ENABLED=true` to make each future successful
+`generate_note` finalization atomically establish a durable
+`publish_artifact` task. The default is false. Disabling creation later does
+not abandon existing publication tasks, and no historical Message or Artifact
+is backfilled. Publication retries independently: a failed Git stage does not
+invalidate the note, its `Message.status = "done"`, or the succeeded generation
+task.
 
 ## Manual Git publication
 
@@ -247,9 +255,11 @@ outcome: created|reconciled|existing
 The command validates Task 006 metadata and bytes, stages only the selected
 path, creates one local commit, and stores its SHA. It disables repository
 hooks and performs no clone, fetch, pull, push, remote configuration, or
-worker/ingestion integration. If the Git commit succeeds but the database
-update fails, the commit is retained; rerunning reconciles its stable Artifact
-trailers without creating a second commit. See `docs/GIT_PUBLICATION.md` for
+ingestion integration. If the Git commit succeeds but the database update
+fails, the commit is retained; rerunning reconciles its stable Artifact
+trailers without creating a second commit. The automatic worker path calls this
+same local publisher without weakening the repository or index rules and
+performs no remote Git or GitHub operation. See `docs/GIT_PUBLICATION.md` for
 the complete safety and recovery boundary.
 
 ## Environment variables
@@ -266,6 +276,7 @@ The app uses:
 * `KNOWLEDGE_BASE_PATH` (defaults to `knowledge-base`)
 * `REDIS_URL` (defaults to `redis://redis:6379/0`)
 * `TASK_DISPATCHER_ENABLED` (defaults to `false`; Compose enables it for app)
+* `GIT_PUBLICATION_ENABLED` (defaults to `false`; gates new publication-task creation only)
 
 The following variable is documented for later milestones and can remain empty:
 

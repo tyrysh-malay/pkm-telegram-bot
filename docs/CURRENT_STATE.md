@@ -31,6 +31,12 @@ Confirmed working:
 * One manual Artifact-UUID CLI validates an existing Artifact and exact file,
   creates or reconciles one local selected-path Git commit, and persists its
   full SHA on `Artifact.git_commit_sha`.
+* Successful `generate_note` finalization can atomically establish one durable
+  `publish_artifact` ProcessingTask. The generic worker resolves the existing
+  note Artifact and reuses the Task 011 local Git publisher.
+* Automatic publication creation defaults to disabled. The setting gates only
+  new downstream creation; already durable publication tasks continue to run,
+  and historical notes are not backfilled.
 * Manual Git publication requires `KNOWLEDGE_BASE_PATH` to be the exact
   initialized repository top-level, an attached named branch, repository-local
   author identity, and an empty index. It preserves unrelated unstaged state.
@@ -55,14 +61,16 @@ Telegram text
 → Message + pending ProcessingTask committed atomically
 → app dispatcher → Redis → worker PostgreSQL claim
 → unchanged deterministic Task 006 processing
-→ ProcessingTask succeeded
+→ generate_note succeeded + optional publish_artifact committed atomically
+→ app dispatcher → Redis → worker PostgreSQL claim
+→ unchanged Task 011 local Git publication
+→ publish_artifact succeeded + Artifact.git_commit_sha
 ```
 
 Not implemented:
 
 ```text
 AI processing
-automatic Git-backed artifact commit
 remote Git synchronization
 Telegram webhook ingestion
 runtime allowlist administration
@@ -149,8 +157,9 @@ build, PostgreSQL readiness, the complete test suite, and unconditional
 cleanup. The local Docker/VPN bridge can still stall a fresh dependency fetch;
 the GitHub-hosted clean build is the independent image-build evidence.
 
-Task 011 focused publication, migration, CLI, and Task 006/007 regression
-coverage passes with real system Git. The complete suite passes 193 tests.
+Task 012 focused chaining, publication, recovery, configuration, migration,
+CLI, and Task 006/007/011 regression coverage passes with real system Git. The
+complete suite passes 235 tests.
 Migration `0004` downgrades to `0003` and re-upgrades while preserving
 User, Message, Artifact, ProcessingTask, and Message-status state; the restored
 publication SHA column remains nullable.
@@ -182,7 +191,7 @@ cross-event-loop pooled connections.
 * No image processing.
 * No file or PDF processing.
 * No AI provider integration.
-* No automatic Git-backed artifact commits or remote synchronization.
+* No remote Git synchronization.
 * No webhook ingestion.
 * Long polling assumes a single app process when enabled.
 * Telegram owner changes require an app restart; no database-backed permission

@@ -114,10 +114,19 @@ INDEX(status, available_at)
 INDEX(status, lease_expires_at)
 ```
 
-New Telegram text creates `task_type = "generate_note"`, `status = "pending"`,
-`attempts = 0`, `max_attempts = 3`, an immediately due `available_at`, and null
-lease/error fields. Existing Messages are not backfilled. The relation has no
-database cascade-delete policy.
+Accepted task types are `generate_note` and `publish_artifact`. New Telegram
+text creates a pending `generate_note`; successful generation can atomically
+create one pending `publish_artifact` when automatic creation is enabled. Both
+start with `attempts = 0`, `max_attempts = 3`, an immediately due
+`available_at`, and null lease/error fields. Existing Messages, Artifacts, and
+succeeded generation tasks are not backfilled. The relation has no database
+cascade-delete policy.
+
+The existing `UNIQUE(message_id, task_type)` constraint permits one task of
+each accepted type per Message. A publication task resolves the existing note
+Artifact through `message_id`; there is deliberately no Artifact foreign key,
+generic target model, or workflow graph. `Artifact.git_commit_sha` remains the
+durable publication result.
 
 The complete status set is `pending`, `queued`, `running`, `retrying`,
 `succeeded`, and `failed`. Attempts count committed worker claims, not broker
@@ -154,5 +163,5 @@ attempt models are not implemented.
 ```text
 operational state        PostgreSQL
 human-readable artifact Markdown file
-repository history       local Git (manual publication only)
+repository history       local Git (manual or durable automatic publication)
 ```

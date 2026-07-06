@@ -8,7 +8,8 @@ from pathlib import Path
 
 from app.knowledge.errors import AtomicPublicationError
 from app.knowledge.errors import FileConflictError
-from app.knowledge.errors import KnowledgeBaseError
+from app.knowledge.errors import KnowledgeBaseInvariantError
+from app.knowledge.errors import KnowledgeBaseOperationalError
 from app.knowledge.errors import TemporaryFileCleanupError
 from app.knowledge.errors import UnsupportedFileEntryError
 
@@ -32,7 +33,7 @@ def resolve_destination(
         or "\\" in relative_path
         or any(part in {"", ".", ".."} for part in raw_parts)
     ):
-        raise KnowledgeBaseError(
+        raise KnowledgeBaseInvariantError(
             f"unsafe relative artifact path: {relative_path!r}"
         )
 
@@ -40,20 +41,28 @@ def resolve_destination(
         root = knowledge_base_root.resolve(strict=not create_missing)
         if create_missing:
             root.mkdir(parents=True, exist_ok=True)
+    except FileNotFoundError as exc:
+        if not create_missing:
+            raise KnowledgeBaseInvariantError(
+                f"knowledge-base root is absent: {knowledge_base_root}"
+            ) from exc
+        raise KnowledgeBaseOperationalError(
+            f"cannot create knowledge-base root {knowledge_base_root}"
+        ) from exc
     except OSError as exc:
         action = "create" if create_missing else "resolve"
-        raise KnowledgeBaseError(
+        raise KnowledgeBaseOperationalError(
             f"cannot {action} knowledge-base root {knowledge_base_root}"
         ) from exc
 
     try:
         root_stat = root.lstat()
     except OSError as exc:
-        raise KnowledgeBaseError(
+        raise KnowledgeBaseOperationalError(
             f"cannot inspect knowledge-base root {knowledge_base_root}"
         ) from exc
     if not stat.S_ISDIR(root_stat.st_mode):
-        raise KnowledgeBaseError(
+        raise KnowledgeBaseInvariantError(
             f"knowledge-base root is not a directory: {knowledge_base_root}"
         )
 
@@ -63,32 +72,41 @@ def resolve_destination(
         parent_stat = parent.lstat()
     except FileNotFoundError:
         if not create_missing:
-            raise KnowledgeBaseError(
+            raise KnowledgeBaseInvariantError(
                 f"artifact directory is absent for {relative_path}"
             )
         try:
             parent.mkdir()
             parent_stat = parent.lstat()
         except FileExistsError:
-            parent_stat = parent.lstat()
+            try:
+                parent_stat = parent.lstat()
+            except OSError as exc:
+                raise KnowledgeBaseOperationalError(
+                    f"cannot inspect artifact directory for {relative_path}"
+                ) from exc
         except OSError as exc:
-            raise KnowledgeBaseError(
+            raise KnowledgeBaseOperationalError(
                 f"cannot create artifact directory for {relative_path}"
             ) from exc
     except OSError as exc:
-        raise KnowledgeBaseError(
+        raise KnowledgeBaseOperationalError(
             f"cannot inspect artifact directory for {relative_path}"
         ) from exc
 
     if stat.S_ISLNK(parent_stat.st_mode) or not stat.S_ISDIR(parent_stat.st_mode):
-        raise KnowledgeBaseError(
+        raise KnowledgeBaseInvariantError(
             f"artifact parent is not a safe directory for {relative_path}"
         )
 
     try:
         parent.resolve(strict=True).relative_to(root)
-    except (OSError, ValueError) as exc:
-        raise KnowledgeBaseError(
+    except OSError as exc:
+        raise KnowledgeBaseOperationalError(
+            f"cannot resolve artifact directory for {relative_path}"
+        ) from exc
+    except ValueError as exc:
+        raise KnowledgeBaseInvariantError(
             f"artifact destination escapes the knowledge-base root: {relative_path}"
         ) from exc
 
@@ -121,7 +139,9 @@ def classify_file(path: Path, expected_bytes: bytes) -> FileState:
     except FileNotFoundError:
         return FileState.ABSENT
     except OSError as exc:
-        raise KnowledgeBaseError(f"cannot inspect artifact path {path.name}") from exc
+        raise KnowledgeBaseOperationalError(
+            f"cannot inspect artifact path {path.name}"
+        ) from exc
 
     if not stat.S_ISREG(entry_stat.st_mode):
         return FileState.UNSUPPORTED
@@ -133,7 +153,9 @@ def classify_file(path: Path, expected_bytes: bytes) -> FileState:
     except OSError as exc:
         if exc.errno == errno.ELOOP:
             return FileState.UNSUPPORTED
-        raise KnowledgeBaseError(f"cannot read artifact path {path.name}") from exc
+        raise KnowledgeBaseOperationalError(
+            f"cannot read artifact path {path.name}"
+        ) from exc
 
     if actual_bytes == expected_bytes:
         return FileState.EXACT
@@ -202,7 +224,7 @@ def publish_no_replace(
             state = classify_file(destination, content)
             if state is not FileState.EXACT:
                 _raise_for_existing_state(state, relative_path)
-                raise KnowledgeBaseError(
+                raise KnowledgeBaseOperationalError(
                     f"artifact path disappeared during publication: {relative_path}"
                 )
         except OSError as exc:
@@ -225,7 +247,7 @@ def publish_no_replace(
                 os.close(descriptor)
             except OSError as exc:
                 if active_error is None:
-                    raise KnowledgeBaseError(
+                    raise KnowledgeBaseOperationalError(
                         f"cannot close temporary artifact for {relative_path}"
                     ) from exc
         try:
@@ -254,14 +276,14 @@ def ensure_exact_file(
         try:
             publish_no_replace(destination, relative_path, content)
         except OSError as exc:
-            raise KnowledgeBaseError(
+            raise KnowledgeBaseOperationalError(
                 f"cannot publish artifact at {relative_path}"
             ) from exc
         state = classify_file(destination, content)
 
     if state is not FileState.EXACT:
         _raise_for_existing_state(state, relative_path)
-        raise KnowledgeBaseError(
+        raise KnowledgeBaseOperationalError(
             f"artifact path is absent after publication: {relative_path}"
         )
 

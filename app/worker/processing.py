@@ -8,21 +8,34 @@ from datetime import datetime
 from datetime import timezone
 from pathlib import Path
 
+from sqlalchemy import select
 from sqlalchemy import update
+from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.ext.asyncio import async_sessionmaker
 
+from app.db.models import Artifact
 from app.db.models import ProcessingTask
 from app.db.session import get_session_factory
+from app.knowledge.errors import AtomicPublicationError
 from app.knowledge.errors import ArtifactConsistencyError
 from app.knowledge.errors import DuplicateArtifactRaceError
 from app.knowledge.errors import FileConflictError
+from app.knowledge.errors import GitPublicationBusyError
+from app.knowledge.errors import GitPublicationInvariantError
+from app.knowledge.errors import GitPublicationOperationalError
+from app.knowledge.errors import GitPublicationTransactionError
 from app.knowledge.errors import KnowledgeArtifactError
 from app.knowledge.errors import KnowledgeBaseError
+from app.knowledge.errors import KnowledgeBaseInvariantError
+from app.knowledge.errors import KnowledgeBaseOperationalError
 from app.knowledge.errors import ProcessingTransactionError
 from app.knowledge.errors import SourceMessageError
+from app.knowledge.errors import TemporaryFileCleanupError
 from app.knowledge.errors import UnsupportedFileEntryError
+from app.knowledge.git_publication import publish_artifact_to_git
+from app.knowledge.markdown import ARTIFACT_TYPE
 from app.knowledge.processing import process_text_message
 from app.settings import get_settings
 from app.worker.constants import MAX_ATTEMPTS_ERROR
@@ -36,6 +49,8 @@ from app.worker.constants import TASK_STATUS_RETRYING
 from app.worker.constants import TASK_STATUS_RUNNING
 from app.worker.constants import TASK_STATUS_SUCCEEDED
 from app.worker.constants import TASK_TYPE_GENERATE_NOTE
+from app.worker.constants import TASK_TYPE_PUBLISH_ARTIFACT
+from app.worker.constants import SUPPORTED_TASK_TYPES
 from app.worker.constants import TERMINAL_STATUSES
 from app.worker.constants import UNSUPPORTED_TASK_TYPE_ERROR
 
@@ -55,6 +70,7 @@ PERMANENT_PROCESSING_ERRORS = (
 class ClaimedTask:
     id: uuid.UUID
     message_id: uuid.UUID
+    task_type: str
     attempt: int
     max_attempts: int
 
@@ -73,7 +89,11 @@ def parse_processing_task_id(value: str) -> uuid.UUID:
     return task_id
 
 
-def sanitize_processing_error(error: Exception) -> str:
+def sanitize_processing_error(
+    error: Exception,
+    *,
+    task_type: str | None = None,
+) -> str:
     if isinstance(error, SourceMessageError):
         summary = "SourceMessageError: source message contract violation"
     elif isinstance(error, ArtifactConsistencyError):
@@ -84,6 +104,27 @@ def sanitize_processing_error(error: Exception) -> str:
         summary = "UnsupportedFileEntryError: unsupported artifact filesystem entry"
     elif isinstance(error, ProcessingTransactionError):
         summary = "ProcessingTransactionError: processing transaction contract violation"
+    elif task_type == TASK_TYPE_GENERATE_NOTE and isinstance(
+        error,
+        (
+            KnowledgeBaseInvariantError,
+            KnowledgeBaseOperationalError,
+        ),
+    ):
+        if isinstance(error, (AtomicPublicationError, TemporaryFileCleanupError)):
+            summary = f"{type(error).__name__}: knowledge-base operation failed"
+        else:
+            summary = "KnowledgeBaseError: knowledge-base operation failed"
+    elif isinstance(error, GitPublicationBusyError):
+        summary = "GitPublicationBusyError: Git publication already in progress"
+    elif isinstance(error, GitPublicationInvariantError):
+        summary = "GitPublicationInvariantError: Git publication contract violation"
+    elif isinstance(error, GitPublicationOperationalError):
+        summary = "GitPublicationOperationalError: Git publication operation failed"
+    elif isinstance(error, KnowledgeBaseInvariantError):
+        summary = "KnowledgeBaseInvariantError: knowledge-base contract violation"
+    elif isinstance(error, KnowledgeBaseOperationalError):
+        summary = "KnowledgeBaseOperationalError: knowledge-base operation failed"
     elif isinstance(error, SQLAlchemyError):
         summary = f"{type(error).__name__}: database operation failed"
     elif isinstance(error, (KnowledgeBaseError, OSError)):
@@ -115,7 +156,7 @@ async def claim_processing_task(
                 return None
             if task.status in TERMINAL_STATUSES:
                 return None
-            if task.task_type != TASK_TYPE_GENERATE_NOTE:
+            if task.task_type not in SUPPORTED_TASK_TYPES:
                 task.status = TASK_STATUS_FAILED
                 task.lease_expires_at = None
                 task.last_error = UNSUPPORTED_TASK_TYPE_ERROR
@@ -146,9 +187,44 @@ async def claim_processing_task(
             return ClaimedTask(
                 id=task.id,
                 message_id=task.message_id,
+                task_type=task.task_type,
                 attempt=task.attempts,
                 max_attempts=task.max_attempts,
             )
+
+
+async def resolve_note_artifact_id(
+    session: AsyncSession,
+    message_id: uuid.UUID,
+) -> uuid.UUID:
+    if session.in_transaction():
+        raise GitPublicationTransactionError(
+            "resolve_note_artifact_id requires a session without an active transaction"
+        )
+
+    try:
+        artifact_ids = list(
+            await session.scalars(
+                select(Artifact.id)
+                .where(
+                    Artifact.message_id == message_id,
+                    Artifact.artifact_type == ARTIFACT_TYPE,
+                )
+                .limit(2)
+            )
+        )
+    finally:
+        await session.rollback()
+
+    if not artifact_ids:
+        raise GitPublicationInvariantError(
+            "deterministic note Artifact is missing for the publication task"
+        )
+    if len(artifact_ids) != 1:
+        raise GitPublicationInvariantError(
+            "multiple deterministic note Artifacts exist for the publication task"
+        )
+    return artifact_ids[0]
 
 
 async def finalize_processing_task(
@@ -156,6 +232,7 @@ async def finalize_processing_task(
     *,
     error: Exception | None,
     permanent: bool = False,
+    create_publication_task: bool = False,
     now: datetime | None = None,
     session_factory: async_sessionmaker[AsyncSession] | None = None,
 ) -> bool:
@@ -169,7 +246,10 @@ async def finalize_processing_task(
     if error is None:
         values.update(status=TASK_STATUS_SUCCEEDED, last_error=None)
     else:
-        values["last_error"] = sanitize_processing_error(error)
+        values["last_error"] = sanitize_processing_error(
+            error,
+            task_type=claimed.task_type,
+        )
         if permanent or claimed.attempt >= claimed.max_attempts:
             values["status"] = TASK_STATUS_FAILED
         else:
@@ -186,10 +266,27 @@ async def finalize_processing_task(
                     ProcessingTask.id == claimed.id,
                     ProcessingTask.status == TASK_STATUS_RUNNING,
                     ProcessingTask.attempts == claimed.attempt,
+                    ProcessingTask.task_type == claimed.task_type,
                 )
                 .values(**values)
             )
             updated = result.rowcount == 1
+            if (
+                updated
+                and error is None
+                and create_publication_task
+                and claimed.task_type == TASK_TYPE_GENERATE_NOTE
+            ):
+                await session.execute(
+                    insert(ProcessingTask)
+                    .values(
+                        message_id=claimed.message_id,
+                        task_type=TASK_TYPE_PUBLISH_ARTIFACT,
+                    )
+                    .on_conflict_do_nothing(
+                        constraint="uq_processing_tasks_message_id_task_type"
+                    )
+                )
 
     if not updated:
         logger.info(
@@ -208,27 +305,58 @@ async def run_processing_task(
     processor: Callable[[AsyncSession, uuid.UUID, Path], Awaitable[object]] = (
         process_text_message
     ),
+    publication_processor: Callable[
+        [AsyncSession, uuid.UUID, Path], Awaitable[object]
+    ] = publish_artifact_to_git,
+    artifact_resolver: Callable[
+        [AsyncSession, uuid.UUID], Awaitable[uuid.UUID]
+    ] = resolve_note_artifact_id,
+    git_publication_enabled: bool | None = None,
 ) -> None:
     factory = session_factory or get_session_factory()
     claimed = await claim_processing_task(task_id, session_factory=factory)
     if claimed is None:
         return
 
-    root = knowledge_base_root or get_settings().knowledge_base_path
+    settings = get_settings()
+    root = knowledge_base_root or settings.knowledge_base_path
+    publication_enabled = (
+        settings.git_publication_enabled
+        if git_publication_enabled is None
+        else git_publication_enabled
+    )
     processing_error: Exception | None = None
     permanent = False
     try:
-        async with factory() as session:
-            await processor(session, claimed.message_id, root)
+        if claimed.task_type == TASK_TYPE_GENERATE_NOTE:
+            async with factory() as session:
+                await processor(session, claimed.message_id, root)
+        else:
+            async with factory() as session:
+                artifact_id = await artifact_resolver(session, claimed.message_id)
+            async with factory() as session:
+                await publication_processor(session, artifact_id, root)
     except Exception as exc:
         processing_error = exc
-        permanent = isinstance(exc, PERMANENT_PROCESSING_ERRORS)
+        if claimed.task_type == TASK_TYPE_PUBLISH_ARTIFACT:
+            permanent = isinstance(
+                exc,
+                (
+                    GitPublicationInvariantError,
+                    SourceMessageError,
+                    ArtifactConsistencyError,
+                    KnowledgeBaseInvariantError,
+                ),
+            )
+        else:
+            permanent = isinstance(exc, PERMANENT_PROCESSING_ERRORS)
 
     try:
         await finalize_processing_task(
             claimed,
             error=processing_error,
             permanent=permanent,
+            create_publication_task=publication_enabled,
             session_factory=factory,
         )
     except Exception:

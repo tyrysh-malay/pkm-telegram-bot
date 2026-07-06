@@ -1,4 +1,4 @@
-# Manual Git Artifact Publication
+# Local Git Artifact Publication
 
 ## Boundary
 
@@ -10,8 +10,32 @@ valid Artifact + exact Task 006 file + initialized local Git repository
 → Artifact.git_commit_sha
 ```
 
-It does not create or repair notes, initialize Git, change branches, contact a
-remote, enqueue work, or run from Telegram ingestion or the worker.
+It does not create or repair notes, initialize Git, change branches, or contact
+a remote.
+
+## Automatic execution
+
+When `GIT_PUBLICATION_ENABLED=true`, successful `generate_note` finalization
+atomically establishes one pending `publish_artifact` ProcessingTask. The
+setting defaults to false and gates only new task creation: existing durable
+publication tasks continue to dispatch, retry, and execute after it is
+disabled. Historical Messages and Artifacts are not backfilled.
+
+The generic worker reloads the publication task from PostgreSQL, resolves the
+single existing note Artifact through its `message_id`, closes that read
+transaction, and calls the same `publish_artifact_to_git(...)` function used by
+the manual CLI with a fresh session. Missing or inconsistent artifacts and
+deterministic repository violations fail permanently. Typed operational
+failures, including temporary filesystem inspection failures, repository-lock
+contention, Git execution failures, and database failures, use the existing
+bounded ProcessingTask retries.
+
+Manual publication before automatic execution returns `existing` without a
+second commit. A commit retained after database failure is reconciled on the
+next worker attempt. A crash after publication but before task finalization is
+also safe: lease recovery invokes the same idempotent publisher, which returns
+`existing`. Publication failure never invalidates the already valid note,
+Message `done` state, or succeeded generation task.
 
 ## Repository setup and validation
 
@@ -103,5 +127,4 @@ otherwise rewrites history as compensation.
 
 The implementation performs no clone, fetch, pull, push, remote inspection or
 configuration, branch creation or switching, merge, rebase, submodule, or
-worktree operation. Remote synchronization and automatic publication remain
-future tasks.
+worktree operation. Remote synchronization remains a future task.

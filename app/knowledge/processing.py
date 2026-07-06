@@ -11,7 +11,7 @@ from app.db.models import Message
 from app.knowledge.errors import ArtifactConsistencyError
 from app.knowledge.errors import DuplicateArtifactRaceError
 from app.knowledge.errors import FileConflictError
-from app.knowledge.errors import KnowledgeBaseError
+from app.knowledge.errors import KnowledgeBaseInvariantError
 from app.knowledge.errors import ProcessingTransactionError
 from app.knowledge.errors import SourceMessageError
 from app.knowledge.errors import UnsupportedFileEntryError
@@ -123,7 +123,7 @@ async def validate_existing_artifact(
     )
     state = classify_file(destination, expected.content)
     if state is FileState.ABSENT:
-        raise KnowledgeBaseError(
+        raise KnowledgeBaseInvariantError(
             f"artifact file is absent at {artifact.file_path}"
         )
     if state is FileState.CONFLICTING:
