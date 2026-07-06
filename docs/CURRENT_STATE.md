@@ -4,7 +4,7 @@ This document describes the current semantic state of the repository. Live Git
 and pull-request inspection provide branch, commit, review-head, and
 working-tree facts.
 
-**Active task:** none selected
+**Active task:** `tasks/010-github-actions-ci.md`
 
 ## Working functionality
 
@@ -95,6 +95,19 @@ The repository is public again, and Web Chat verified public access to the
 replacement Task 009 review PR #2. PR #1 remains closed and is not reused.
 Connector access to the same evidence while the repository is private remains
 unverified and must not be inferred from either public access check.
+
+The Task 010 branch configures one GitHub Actions workflow and one `Test` job
+for pull requests targeting `main` and pushes to `main`. Its declared check
+identity is `CI / Test`; live registration and exact-head success remain part
+of the active task's pushed verification boundary.
+
+The job validates the committed event range, builds the development image,
+starts only PostgreSQL, and runs pytest in a one-off app container. It uses
+separate disposable development and test database names; pytest creates the
+test database and applies Alembic migrations. Telegram polling, task dispatch,
+and AI-provider access are disabled without live secrets. Cleanup removes the
+CI database volume unconditionally. Redis, the worker, custom caching, branch
+protection, deployment, and publishing are outside this CI boundary.
 
 ## Database test isolation
 

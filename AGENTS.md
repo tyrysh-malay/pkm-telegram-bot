@@ -69,6 +69,11 @@ force-push reviewed work without separate explicit authorization.
 The complete lifecycle, conversation responsibilities, source-of-truth rules,
 and documentation update matrix are in `docs/WORKFLOW.md`.
 
+When CI is available, inspect its result for the exact pushed task-branch head.
+The required CI check must pass before marking a pull request ready or
+presenting the implementation as ready for final review. Any correction commit
+invalidates an earlier green result. CI success does not authorize a merge.
+
 ## Code style
 
 * Prefer readable, explicit Python.
