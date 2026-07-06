@@ -168,14 +168,14 @@ class _GitRepository:
 
     def require_clean_index(self) -> None:
         unmerged = self.run("ls-files", "--unmerged", "-z").stdout
-        staged = self.run("diff", "--cached", "--name-only", "-z").stdout
-        status = self.run(
-            "status", "--porcelain=v2", "-z", "--untracked-files=all"
+        staged_or_intent_to_add = self.run(
+            "diff",
+            "--cached",
+            "--name-only",
+            "-z",
+            "--ita-visible-in-index",
         ).stdout
-        intent_to_add = any(
-            record.startswith(b"1 .A ") for record in status.split(b"\0")
-        )
-        if unmerged or staged or intent_to_add:
+        if unmerged or staged_or_intent_to_add:
             raise GitPublicationError(
                 "knowledge-base Git index must be empty; resolve staged, unmerged, or intent-to-add state manually"
             )

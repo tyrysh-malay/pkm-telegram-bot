@@ -349,6 +349,45 @@ def test_intent_to_add_index_state_is_rejected_and_preserved(
     asyncio.run(run())
 
 
+def test_deleted_intent_to_add_path_is_rejected_and_preserved(tmp_path: Path) -> None:
+    async def run() -> None:
+        initialize_repository(tmp_path)
+        artifact_id = await establish_artifact(tmp_path)
+        intent_path = "deleted-intent.txt"
+        destination = tmp_path / intent_path
+        destination.write_text("leave intent state unchanged\n")
+        assert git(tmp_path, "add", "--intent-to-add", "--", intent_path).returncode == 0
+        destination.unlink()
+        before_status = git(
+            tmp_path,
+            "status",
+            "--porcelain=v1",
+            "--untracked-files=all",
+        ).stdout
+        before_index = git(tmp_path, "ls-files", "--debug", "--", intent_path).stdout
+
+        with pytest.raises(GitPublicationError, match="index must be empty"):
+            await publish(tmp_path, artifact_id)
+
+        assert (
+            git(
+                tmp_path,
+                "status",
+                "--porcelain=v1",
+                "--untracked-files=all",
+            ).stdout
+            == before_status
+        )
+        assert git(tmp_path, "ls-files", "--debug", "--", intent_path).stdout == (
+            before_index
+        )
+        assert not destination.exists()
+        assert git(tmp_path, "rev-parse", "--verify", "HEAD").returncode != 0
+        assert (await load_artifact(artifact_id)).git_commit_sha is None
+
+    asyncio.run(run())
+
+
 def test_ignored_selected_path_fails_without_forced_staging(tmp_path: Path) -> None:
     async def run() -> None:
         initialize_repository(tmp_path)
