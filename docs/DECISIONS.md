@@ -1092,6 +1092,50 @@ review evidence still names one exact repository state.
 
 ---
 
+## D-029 — Verify pull requests with one Docker Compose-backed GitHub Actions check
+
+**Decision**
+
+Use one GitHub Actions workflow with one job for pull requests targeting the
+default branch and pushes to that branch. Check out and verify the exact source
+head, validate the committed patch range, and use the existing Docker Compose
+development image as the test boundary.
+
+Start only PostgreSQL as a long-running service. Run the authoritative pytest
+suite in a one-off app container; pytest remains responsible for creating the
+isolated test database and applying committed Alembic migrations. Use explicit
+disposable configuration with Telegram polling, task dispatch, and AI-provider
+access disabled, then remove Compose resources and database volumes
+unconditionally.
+
+**Context or problem**
+
+Pull-request descriptions could report local verification but the repository
+had no independently executed check for the exact pushed head under review.
+
+**Reasoning**
+
+Reusing the development image and pytest migration bootstrap keeps local and CI
+verification aligned without a second host-side Python environment. PostgreSQL
+is the only live service required by the current suite, so Redis and a worker
+would add cost without increasing coverage.
+
+**Consequences**
+
+* Every pull request receives one stable baseline check.
+* Corrections require a new successful result for the new head.
+* CI requires no Telegram, AI-provider, or production secret.
+* Custom Docker caching, matrices, branch protection, deployment, and
+  publishing remain separate future work.
+* CI success is required evidence but does not replace review or authorize
+  merge.
+
+**Status:** accepted
+
+**Related task:** Task 010
+
+---
+
 # Possible future ADR split
 
 If this file becomes too large, the following decisions are good candidates for individual ADR files:

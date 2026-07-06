@@ -96,6 +96,19 @@ replacement Task 009 review PR #2. PR #1 remains closed and is not reused.
 Connector access to the same evidence while the repository is private remains
 unverified and must not be inferred from either public access check.
 
+GitHub Actions provides one `CI` workflow and one `Test` job for pull requests
+targeting `main` and pushes to `main`. The observed pull-request check context
+is `CI / Test`. Readiness requires that check to succeed for the exact current
+pushed head; a later correction invalidates the earlier result.
+
+The job validates the committed event range, builds the development image,
+starts only PostgreSQL, and runs pytest in a one-off app container. It uses
+separate disposable development and test database names; pytest creates the
+test database and applies Alembic migrations. Telegram polling, task dispatch,
+and AI-provider access are disabled without live secrets. Cleanup removes the
+CI database volume unconditionally. Redis, the worker, custom caching, branch
+protection, deployment, and publishing are outside this CI boundary.
+
 ## Database test isolation
 
 The development application uses `DATABASE_URL`.
@@ -123,16 +136,11 @@ The development image copies the complete application test suite. Repository
 collaboration runs from the host checkout rather than from the application
 image, whose build context intentionally excludes `.git`.
 
-Task 009 structural, historical-preservation, active-reference, and application
-scope checks passed. The 154-test application suite passed from the current
-source and reduced test tree mounted read-only into the established development
-image. In-container `/health` and `/ready` checks returned `200`.
-
-A fresh Compose image build reached the dependency-install step but stalled on
-the known Docker/VPN bridge path. A host-network fallback downloaded most
-dependencies before PyPI timed out while transferring `uvloop`. The final image
-definition and Compose configuration were validated, but a completed fresh
-image build remains unverified in this environment.
+The `CI / Test` check independently verifies the exact selected source SHA,
+committed patch integrity, Compose configuration, a clean development-image
+build, PostgreSQL readiness, the complete 154-test suite, and unconditional
+cleanup. The local Docker/VPN bridge can still stall a fresh dependency fetch;
+the GitHub-hosted clean build is the independent image-build evidence.
 
 Task 008 authorization and ingestion coverage passed 44 focused tests, and 91
 focused Task 006/007 processing regressions passed unchanged. The full suite

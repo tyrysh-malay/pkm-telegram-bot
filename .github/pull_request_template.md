@@ -10,11 +10,21 @@ The contract is the task file at that exact commit.
 
 <!-- Summarize the bounded result and its user or developer impact. -->
 
-## Verification
+## Local verification
 
-Verification results below are reported claims unless backed by an available CI check.
+Local verification results below are Codex-supplied claims.
 
 <!-- List exact commands and pass, fail, or not-run results. -->
+
+## GitHub Actions verification
+
+Workflow/job name:
+Observed check context:
+Run ID or URL:
+Tested head SHA:
+CI conclusion:
+
+<!-- Confirm that the tested SHA is the exact current pushed PR head. -->
 
 ## Documentation
 
@@ -22,7 +32,7 @@ Verification results below are reported claims unless backed by an available CI 
 
 ## Risks and unverified items
 
-<!-- Include environment limitations, missing CI, and postponed work. -->
+<!-- Include environment limitations, unverified items, and postponed work. -->
 
 ## Review scope
 

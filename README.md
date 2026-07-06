@@ -90,6 +90,24 @@ Check the database readiness endpoint:
 curl http://localhost:8000/ready
 ```
 
+## Continuous integration
+
+GitHub Actions runs one workflow and job for every pull request targeting
+`main` and every push to `main`. The observed pull-request check context is
+`CI / Test`. It validates the committed patch, builds the development app image
+through Docker Compose, starts only PostgreSQL, and runs the complete pytest
+suite in a one-off app container.
+
+CI uses separate disposable `pkm` and `pkm_test` databases. Pytest creates the
+test database and applies the committed Alembic migrations. Telegram polling,
+the task dispatcher, and AI-provider access are disabled, so the job requires
+no Telegram or AI secrets. Compose resources and the CI database volume are
+removed after every run.
+
+For local parity, use the isolated environment and command sequence in
+[Task 010](tasks/010-github-actions-ci.md#local-ci-parity-verification). Branch
+protection is not configured; adding it remains separate future work.
+
 ## Contributing through pull requests
 
 Repository-owned task specifications remain the review contract. For each
@@ -101,8 +119,9 @@ authorized task:
 4. confirm connected review access;
 5. implement and verify locally;
 6. commit and push only the authorized task branch;
-7. review the exact pushed pull-request head;
-8. merge only after approval and separate explicit authorization.
+7. require the available CI check to pass for the exact pushed head;
+8. review the exact pushed pull-request head;
+9. merge only after approval and separate explicit authorization.
 
 Uncommitted local work is not visible through GitHub and cannot be included in
 pull-request review. See `docs/WORKFLOW.md` for authority boundaries, evidence

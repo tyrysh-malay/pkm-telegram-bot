@@ -40,6 +40,18 @@ Snapshots, summaries, comments, and separately supplied files are handoff aids,
 not independent sources of truth. Conflicting evidence requires inspection of
 the current repository and pull request.
 
+## CI evidence
+
+Local verification remains required and is a Codex-supplied claim. The
+repository's available required CI job is independent evidence because GitHub
+Actions executes it from the pushed commit. That job must succeed for the exact
+current pull-request head before readiness and final approval.
+
+A green result belongs only to the head SHA it tested. Any correction commit
+invalidates the earlier result and must receive a new successful run. CI logs
+and failure diagnostics help locate problems but do not replace implementation
+review. A successful CI run does not authorize merge.
+
 ## Task lifecycle
 
 1. **Discuss architecture.** Compare durable boundaries and record accepted
@@ -69,16 +81,22 @@ the current repository and pull request.
 12. **Complete the PR description.** Record exact commands and results,
     documentation, risks, exclusions, contract SHA, base SHA, and current head.
 13. **Mark ready.** Do this only when the task authorizes it and implementation,
-    verification, documentation, description, scope, and branch cleanliness pass.
+    local verification, documentation, description, scope, branch cleanliness,
+    and the required CI result for the exact current pushed head pass.
 14. **Review the exact PR head.** Handoff Review identifies the repository, PR,
     contract SHA, base SHA, and exact pushed head SHA.
 15. **Apply bounded corrections.** Keep them on the same task branch, preserve
-    history, rerun relevant checks, push normally, and review the new exact head.
-16. **Obtain final approval.** Approval applies only to the identified head.
+    history, rerun relevant local checks, push normally, require a new green CI
+    result, and review the new exact head.
+16. **Obtain final approval.** Approval applies only to the identified head and
+    its successful required CI result.
 17. **Merge only after separate authorization.** Use the task's accepted merge
     method; readiness or approval alone never authorizes merge.
 18. **Select the next task separately.** Completion does not invent or activate
     a successor.
+
+The workflow's push-to-default-branch run can occur only after a separately
+authorized merge. It is not a precondition that could authorize that merge.
 
 Task requirements must not be silently rewritten after implementation to match
 the code. Status and concise evidence may be appended without replacing the
@@ -121,10 +139,11 @@ task branch and current head SHA
 commits and changed paths
 ```
 
-The description must summarize outcome, exact verification commands and
-results, documentation, risks and unverified items, and review scope. It must
-state that reported verification is a Codex claim unless backed by an
-available CI check.
+The description must summarize outcome, exact local verification commands and
+results, the required CI workflow/job, run URL or ID, tested head SHA,
+conclusion, documentation, risks and unverified items, and review scope. Local
+results remain Codex claims; the CI result is independent evidence only for the
+exact head it tested.
 
 When connected access is a task prerequisite, the gate passes only after the
 collaboration channel explicitly confirms repository and PR metadata, the task
@@ -132,9 +151,10 @@ at the contract SHA, commit list, changed files or patch, and current head SHA.
 Record visibility limitations honestly. A successful local push or CLI query is
 not evidence that another review surface has access.
 
-After any pushed correction, the old review result applies only to the earlier
-head. Update the description when evidence changes and require review of the new
-head. Do not force-push to make the head appear unchanged.
+After any pushed correction, the old review and CI results apply only to the
+earlier head. Update the description when evidence changes, require a new green
+CI result, and require review of the new head. Do not force-push to make the
+head appear unchanged.
 
 ## Conversation responsibilities
 
@@ -161,11 +181,16 @@ preserving unrelated state.
 Codex does not push the default branch, merge without separate authorization,
 expose secrets, or claim GitHub contains local uncommitted work.
 
+When required CI is available, Codex verifies that it passed for the exact
+current pushed head before marking the pull request ready or presenting it for
+final approval.
+
 ### Handoff Review
 
 Responsible for reviewing the exact contract commit and task path, PR base and
-head SHAs, commits, complete patch, description, and available checks. It cannot
-review uncommitted local changes and must identify the exact head SHA reviewed.
+head SHAs, commits, complete patch, description, and required CI result. It
+cannot review uncommitted local changes and must identify the exact head SHA and
+successful run reviewed. CI success does not replace patch review.
 
 ### Future Scope
 
