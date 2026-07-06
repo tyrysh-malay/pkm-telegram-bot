@@ -1,6 +1,6 @@
 # Task 010: Add GitHub Actions CI for pull requests
 
-**Status:** ready for review
+**Status:** completed
 **Depends on:** Tasks 000–009
 **Target file:** `tasks/010-github-actions-ci.md`
 **Expected branch:** `task/010-github-actions-ci`
