@@ -87,6 +87,8 @@ class OpenAIEnrichmentProvider:
             if exc.status_code >= 500:
                 raise AIProviderServerError("OpenAI server error") from exc
             raise AIProviderOperationalError("OpenAI API status error") from exc
+        except openai.APIResponseValidationError as exc:
+            raise AIProviderResponseError("OpenAI response failed validation") from exc
         except openai.APIError as exc:
             raise AIProviderOperationalError("OpenAI API error") from exc
         except ValidationError as exc:
@@ -103,9 +105,12 @@ class OpenAIEnrichmentProvider:
 
         response_model = getattr(response, "model", None)
         response_id = getattr(response, "id", None)
-        if not isinstance(response_model, str):
+        if not _valid_response_metadata(response_model, max_length=255):
             raise AIProviderResponseError("OpenAI response model is invalid")
-        if response_id is not None and not isinstance(response_id, str):
+        if response_id is not None and not _valid_response_metadata(
+            response_id,
+            max_length=255,
+        ):
             raise AIProviderResponseError("OpenAI response id is invalid")
         response_id = response_id.strip() if isinstance(response_id, str) else None
 
@@ -143,3 +148,12 @@ def _has_refusal(response: Any) -> bool:
             if getattr(content, "type", None) == "refusal":
                 return True
     return False
+
+
+def _valid_response_metadata(value: object, *, max_length: int) -> bool:
+    return (
+        isinstance(value, str)
+        and bool(value.strip())
+        and "\0" not in value
+        and len(value) <= max_length
+    )

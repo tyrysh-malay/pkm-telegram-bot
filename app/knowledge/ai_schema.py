@@ -4,7 +4,6 @@ import unicodedata
 
 from pydantic import BaseModel
 from pydantic import ConfigDict
-from pydantic import Field
 from pydantic import field_validator
 
 
@@ -51,14 +50,20 @@ def _deduplicate(values: list[str]) -> list[str]:
     return deduplicated
 
 
+def _enforce_list_limit(values: list[str], *, field_name: str) -> list[str]:
+    if len(values) > 12:
+        raise ValueError(f"{field_name} must contain at most 12 items")
+    return values
+
+
 class EnrichmentResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True, strict=True)
 
     title: str
     summary: str
-    key_points: list[str] = Field(max_length=12)
-    tags: list[str] = Field(max_length=12)
-    action_items: list[str] = Field(max_length=12)
+    key_points: list[str]
+    tags: list[str]
+    action_items: list[str]
 
     @field_validator("title")
     @classmethod
@@ -73,26 +78,35 @@ class EnrichmentResult(BaseModel):
     @field_validator("key_points")
     @classmethod
     def normalize_key_points(cls, values: list[str]) -> list[str]:
-        return _deduplicate(
-            [
-                _normalize_text(value, field_name="key point", max_length=500)
-                for value in values
-            ]
+        return _enforce_list_limit(
+            _deduplicate(
+                [
+                    _normalize_text(value, field_name="key point", max_length=500)
+                    for value in values
+                ]
+            ),
+            field_name="key_points",
         )
 
     @field_validator("tags")
     @classmethod
     def normalize_tags(cls, values: list[str]) -> list[str]:
-        return _deduplicate([_normalize_tag(value) for value in values])
+        return _enforce_list_limit(
+            _deduplicate([_normalize_tag(value) for value in values]),
+            field_name="tags",
+        )
 
     @field_validator("action_items")
     @classmethod
     def normalize_action_items(cls, values: list[str]) -> list[str]:
-        return _deduplicate(
-            [
-                _normalize_text(value, field_name="action item", max_length=500)
-                for value in values
-            ]
+        return _enforce_list_limit(
+            _deduplicate(
+                [
+                    _normalize_text(value, field_name="action item", max_length=500)
+                    for value in values
+                ]
+            ),
+            field_name="action_items",
         )
 
 

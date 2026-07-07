@@ -131,6 +131,8 @@ async def _validated_source(
 
     if message.raw_text is None:
         raise AIEnrichmentSourceError(f"message {message_id} has null raw_text")
+    if "\0" in message.raw_text:
+        raise AIEnrichmentSourceError(f"message {message_id} source contains NUL")
     source_text = canonical_source_text(message.raw_text)
     if not any(not character.isspace() for character in source_text):
         raise AIEnrichmentSourceError(
@@ -293,7 +295,7 @@ def _file_state_or_absent(
             create_missing=False,
         )
     except KnowledgeBaseInvariantError as exc:
-        if "absent" in str(exc):
+        if isinstance(exc.__cause__, FileNotFoundError):
             return FileState.ABSENT
         raise
     return classify_file(destination, rendered.content)

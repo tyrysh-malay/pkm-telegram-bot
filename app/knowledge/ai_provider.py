@@ -48,11 +48,13 @@ class EnrichmentProvider(Protocol):
 
 
 def _validate_text_metadata(
-    value: str,
+    value: object,
     *,
     field_name: str,
     max_length: int,
 ) -> str:
+    if not isinstance(value, str):
+        raise AIProviderResponseError(f"provider result has invalid {field_name}")
     if not value or not value.strip() or "\0" in value:
         raise AIProviderResponseError(f"provider result has invalid {field_name}")
     if len(value) > max_length:
@@ -61,8 +63,11 @@ def _validate_text_metadata(
 
 
 def validate_provider_result(
-    result: ProviderEnrichmentResult,
+    result: object,
 ) -> ProviderEnrichmentResult:
+    if not isinstance(result, ProviderEnrichmentResult):
+        raise AIProviderResponseError("provider result has invalid container")
+
     provider = _validate_text_metadata(
         result.provider,
         field_name="provider",
@@ -82,6 +87,9 @@ def validate_provider_result(
             field_name="response_id",
             max_length=255,
         )
+
+    if not isinstance(result.enrichment, EnrichmentResult):
+        raise AIProviderResponseError("provider result has invalid enrichment")
     try:
         enrichment = EnrichmentResult.model_validate(
             result.enrichment.model_dump(mode="json")

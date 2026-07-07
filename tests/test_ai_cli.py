@@ -17,7 +17,8 @@ def test_invalid_uuid_uses_argparse_status_2() -> None:
     assert caught.value.code == 2
 
 
-def test_success_output_is_exact(monkeypatch, capsys) -> None:
+@pytest.mark.parametrize("outcome", ("created", "reconciled", "existing"))
+def test_success_output_is_exact(monkeypatch, capsys, outcome: str) -> None:
     async def fake_enrich_text_message(**_kwargs):
         return AIEnrichmentResult(
             message_id=MESSAGE_ID,
@@ -27,7 +28,7 @@ def test_success_output_is_exact(monkeypatch, capsys) -> None:
             file_path="processed/2026-07-07--123e4567-e89b-12d3-a456-426614174000.md",
             provider="openai",
             model="gpt-test",
-            outcome="created",
+            outcome=outcome,  # type: ignore[arg-type]
         )
 
     monkeypatch.setattr(ai_cli, "enrich_text_message", fake_enrich_text_message)
@@ -42,7 +43,7 @@ def test_success_output_is_exact(monkeypatch, capsys) -> None:
         "file_path: processed/2026-07-07--123e4567-e89b-12d3-a456-426614174000.md\n"
         "provider: openai\n"
         "model: gpt-test\n"
-        "outcome: created\n"
+        f"outcome: {outcome}\n"
     )
 
 
