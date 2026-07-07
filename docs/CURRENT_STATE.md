@@ -4,7 +4,7 @@ This document describes the current semantic state of the repository. Live Git
 and pull-request inspection provide branch, commit, review-head, and
 working-tree facts.
 
-**Active task:** none selected
+**Active task:** `tasks/013-manual-structured-ai-enrichment.md`
 
 ## Working functionality
 
