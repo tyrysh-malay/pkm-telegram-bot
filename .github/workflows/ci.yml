@@ -26,6 +26,7 @@ env:
   REDIS_URL: redis://redis:6379/0
   KNOWLEDGE_BASE_PATH: /var/tmp/pkm-ci-knowledge-base
   OPENAI_API_KEY: ""
+  OPENAI_MODEL: ""
 
 jobs:
   test:
@@ -93,6 +94,7 @@ jobs:
             -e TELEGRAM_BOT_TOKEN= \
             -e TELEGRAM_ALLOWED_USER_IDS='[]' \
             -e OPENAI_API_KEY= \
+            -e OPENAI_MODEL= \
             -e KNOWLEDGE_BASE_PATH=/var/tmp/pkm-ci-knowledge-base \
             app python -m pytest
 

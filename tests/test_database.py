@@ -69,3 +69,40 @@ def test_artifacts_table_has_expected_business_columns() -> None:
         ]
 
     asyncio.run(run())
+
+
+def test_ai_enrichments_table_has_expected_columns_and_jsonb() -> None:
+    async def run() -> tuple[list[str], str]:
+        async with get_engine().connect() as connection:
+            columns = await connection.execute(
+                text(
+                    "SELECT column_name FROM information_schema.columns "
+                    "WHERE table_schema = 'public' AND table_name = 'ai_enrichments' "
+                    "ORDER BY ordinal_position"
+                )
+            )
+            data_type = await connection.scalar(
+                text(
+                    "SELECT data_type FROM information_schema.columns "
+                    "WHERE table_schema = 'public' AND table_name = 'ai_enrichments' "
+                    "AND column_name = 'result_json'"
+                )
+            )
+        return [row[0] for row in columns], data_type
+
+    assert asyncio.run(run()) == (
+        [
+            "id",
+            "message_id",
+            "source_artifact_id",
+            "source_content_sha256",
+            "provider",
+            "model",
+            "prompt_version",
+            "schema_version",
+            "provider_response_id",
+            "result_json",
+            "created_at",
+        ],
+        "jsonb",
+    )

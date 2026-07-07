@@ -5,7 +5,7 @@ A small Python backend for turning Telegram inputs into Git-backed Markdown know
 The current foundation includes a FastAPI app, Telegram text persistence,
 deterministic Markdown note generation, Artifact persistence, Alembic
 migrations, durable PostgreSQL-backed processing, Redis/Dramatiq delivery,
-Docker Compose, and tests.
+manual structured AI enrichment, Docker Compose, and tests.
 
 ## Requirements
 
@@ -204,7 +204,7 @@ the note to Git.
 
 Telegram's `Saved for processing.` acknowledgement means that the Message and
 task were durably persisted, not that processing completed. There is no
-worker-to-Telegram completion notification or AI processing.
+worker-to-Telegram completion notification or automatic AI processing.
 See `docs/MARKDOWN_ARTIFACTS.md` for rendering and recovery behavior.
 
 Set `GIT_PUBLICATION_ENABLED=true` to make each future successful
@@ -214,6 +214,56 @@ not abandon existing publication tasks, and no historical Message or Artifact
 is backfilled. Publication retries independently: a failed Git stage does not
 invalidate the note, its `Message.status = "done"`, or the succeeded generation
 task.
+
+## Manual AI enrichment
+
+AI enrichment is an explicit developer action for a completed text Message with
+an exact raw note Artifact and file. It leaves the raw `inbox/` note unchanged,
+stores one immutable `AIEnrichment` row, and materializes a second
+`enriched_note` Artifact under `processed/`.
+
+New provider requests require both values in the app environment:
+
+```text
+OPENAI_API_KEY=
+OPENAI_MODEL=
+```
+
+Both settings are optional at startup. The app, worker, `/health`, `/ready`,
+tests, and existing-enrichment reconciliation do not require them. CI sets them
+empty and uses fakes/mocks only; tests must not contact OpenAI.
+
+After migrations are current, run one manual enrichment:
+
+```bash
+docker compose exec app \
+  python -m app.knowledge.ai_cli \
+  --message-id <canonical-message-uuid>
+```
+
+Success prints exactly:
+
+```text
+message_id: <message-uuid>
+source_artifact_id: <raw-artifact-uuid>
+ai_enrichment_id: <ai-enrichment-uuid>
+enriched_artifact_id: <enriched-artifact-uuid>
+file_path: <processed-relative-path>
+provider: <provider>
+model: <accepted-model>
+outcome: created|reconciled|existing
+```
+
+If an accepted enrichment already exists, rerunning does not need OpenAI
+configuration and does not make another provider call; it reconciles missing
+local Artifact/file state from persisted JSONB. The provider receives only the
+canonical raw source text, not Markdown frontmatter, Telegram IDs, database IDs,
+Git metadata, or an API key in logs. The adapter uses OpenAI Responses
+structured parsing with `store=false`, no SDK retries, and a bounded timeout.
+
+Task 013 does not add a ProcessingTask type, worker integration, Telegram AI
+command, automatic invocation, regeneration, replacement, provider routing, or
+enriched Git publication. See `docs/AI_ENRICHMENT.md` for the full boundary.
 
 ## Manual Git publication
 

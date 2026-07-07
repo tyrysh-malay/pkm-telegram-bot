@@ -37,6 +37,18 @@ Confirmed working:
 * Automatic publication creation defaults to disabled. The setting gates only
   new downstream creation; already durable publication tasks continue to run,
   and historical notes are not backfilled.
+* One manual Message-UUID AI enrichment CLI validates a completed text Message,
+  its raw `note` Artifact, and exact raw file; sends only canonical raw source
+  text to the OpenAI adapter; accepts at most one immutable `AIEnrichment`; and
+  materializes one deterministic `enriched_note` Artifact under `processed/`.
+* Accepted AI enrichment rows store source digest, provider/model provenance,
+  prompt version 1, schema version 1, and normalized JSONB. Existing accepted
+  rows can reconcile missing local enriched Artifact/file state without OpenAI
+  credentials or another provider call.
+* OpenAI configuration is optional at process startup. New manual provider
+  requests require both `OPENAI_API_KEY` and `OPENAI_MODEL`; `/health`,
+  `/ready`, Telegram ingestion, the dispatcher, and the worker remain
+  AI-unaware.
 * Manual Git publication requires `KNOWLEDGE_BASE_PATH` to be the exact
   initialized repository top-level, an attached named branch, repository-local
   author identity, and an empty index. It preserves unrelated unstaged state.
@@ -67,10 +79,22 @@ Telegram text
 → publish_artifact succeeded + Artifact.git_commit_sha
 ```
 
+The manual AI-enrichment flow is:
+
+```text
+completed Message + exact raw note Artifact/file
+→ source snapshot + digest
+→ OpenAI structured-output request outside a database transaction
+→ immutable AIEnrichment
+→ deterministic enriched_note Artifact under processed/
+```
+
 Not implemented:
 
 ```text
-AI processing
+automatic AI processing
+AI ProcessingTask or worker integration
+enriched Artifact Git publication
 remote Git synchronization
 Telegram webhook ingestion
 runtime allowlist administration
@@ -190,7 +214,8 @@ cross-event-loop pooled connections.
 * No voice processing.
 * No image processing.
 * No file or PDF processing.
-* No AI provider integration.
+* No automatic AI provider orchestration.
+* No enriched Artifact Git publication.
 * No remote Git synchronization.
 * No webhook ingestion.
 * Long polling assumes a single app process when enabled.

@@ -70,11 +70,11 @@ def resolve_destination(
     parent = destination.parent
     try:
         parent_stat = parent.lstat()
-    except FileNotFoundError:
+    except FileNotFoundError as exc:
         if not create_missing:
             raise KnowledgeBaseInvariantError(
                 f"artifact directory is absent for {relative_path}"
-            )
+            ) from exc
         try:
             parent.mkdir()
             parent_stat = parent.lstat()

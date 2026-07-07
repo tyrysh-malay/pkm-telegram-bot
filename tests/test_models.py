@@ -6,6 +6,7 @@ from sqlalchemy import func
 from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
+from app.db.models import AIEnrichment
 from app.db.models import Artifact
 from app.db.models import Message
 from app.db.models import User
@@ -192,6 +193,121 @@ def test_artifact_git_commit_sha_can_store_full_object_id() -> None:
             )
 
         assert stored == commit_sha
+
+    asyncio.run(run())
+
+
+def test_ai_enrichment_persists_required_fields_and_nullable_response_id() -> None:
+    async def run() -> None:
+        session_factory = get_session_factory()
+        telegram_user_id = random_telegram_id()
+
+        async with session_factory() as session:
+            user = User(telegram_user_id=telegram_user_id)
+            session.add(user)
+            await session.flush()
+            message = Message(
+                user_id=user.id,
+                telegram_chat_id=telegram_user_id,
+                telegram_message_id=31,
+                input_type="text",
+                raw_text="source",
+                status="done",
+                idempotency_key=f"telegram:{telegram_user_id}:31",
+            )
+            session.add(message)
+            await session.flush()
+            artifact = Artifact(
+                message_id=message.id,
+                artifact_type="note",
+                title="Source",
+                slug="source",
+                file_path=f"inbox/{message.id}.md",
+            )
+            session.add(artifact)
+            await session.flush()
+            enrichment = AIEnrichment(
+                message_id=message.id,
+                source_artifact_id=artifact.id,
+                source_content_sha256="a" * 64,
+                provider="openai",
+                model="gpt-test",
+                prompt_version=1,
+                schema_version=1,
+                provider_response_id=None,
+                result_json={
+                    "title": "Title",
+                    "summary": "Summary",
+                    "key_points": [],
+                    "tags": [],
+                    "action_items": [],
+                },
+            )
+            session.add(enrichment)
+            await session.commit()
+
+            stored = await session.get(AIEnrichment, enrichment.id)
+
+        assert stored is not None
+        assert stored.message_id == message.id
+        assert stored.source_artifact_id == artifact.id
+        assert stored.provider_response_id is None
+        assert stored.result_json["title"] == "Title"
+        assert stored.created_at is not None
+
+    asyncio.run(run())
+
+
+def test_ai_enrichment_is_unique_per_message() -> None:
+    async def run() -> None:
+        session_factory = get_session_factory()
+        telegram_user_id = random_telegram_id()
+
+        async with session_factory() as session:
+            user = User(telegram_user_id=telegram_user_id)
+            session.add(user)
+            await session.flush()
+            message = Message(
+                user_id=user.id,
+                telegram_chat_id=telegram_user_id,
+                telegram_message_id=32,
+                input_type="text",
+                raw_text="source",
+                status="done",
+                idempotency_key=f"telegram:{telegram_user_id}:32",
+            )
+            session.add(message)
+            await session.flush()
+            artifact = Artifact(
+                message_id=message.id,
+                artifact_type="note",
+                title="Source",
+                slug="source",
+                file_path=f"inbox/{message.id}.md",
+            )
+            session.add(artifact)
+            await session.flush()
+            payload = {
+                "message_id": message.id,
+                "source_artifact_id": artifact.id,
+                "source_content_sha256": "a" * 64,
+                "provider": "openai",
+                "model": "gpt-test",
+                "prompt_version": 1,
+                "schema_version": 1,
+                "result_json": {
+                    "title": "Title",
+                    "summary": "Summary",
+                    "key_points": [],
+                    "tags": [],
+                    "action_items": [],
+                },
+            }
+            session.add_all([AIEnrichment(**payload), AIEnrichment(**payload)])
+
+            with pytest.raises(IntegrityError):
+                await session.commit()
+            await session.rollback()
 
     asyncio.run(run())
 

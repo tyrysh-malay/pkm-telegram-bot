@@ -1227,6 +1227,60 @@ delivery, and crashes after publication.
 
 ---
 
+## D-032 — Accept one immutable structured AI enrichment before materializing an enriched Artifact
+
+**Decision**
+
+Add a manual-only AI enrichment boundary that accepts at most one immutable
+structured result per Message before materializing a deterministic
+`enriched_note` Artifact. The raw `note` Artifact remains the faithful capture
+and source of truth. The provider input is canonical raw source text, and the
+accepted row stores source digest, provider/model provenance, prompt version,
+schema version, and normalized JSONB.
+
+The provider call occurs outside a PostgreSQL transaction. After the provider
+returns, the application locks and revalidates the Message, raw Artifact, raw
+file, source text, and digest before inserting the accepted row. A
+provider-neutral protocol owns the domain boundary; Task 013 supplies only an
+OpenAI Responses structured-output adapter with `store=false`, disabled SDK
+retries, and a bounded timeout.
+
+**Context or problem**
+
+The system already captures faithful raw notes and can publish them locally to
+Git. Adding interpretation directly to raw-note generation would make raw
+capture depend on provider availability and would conflate source preservation
+with generated structure. Adding it directly to the worker would skip source
+digest, prompt/schema versioning, provider/PostgreSQL transaction boundaries,
+and local materialization recovery.
+
+**Reasoning**
+
+One immutable accepted row gives future orchestration a stable domain boundary
+without inventing a provider platform. Revalidating before and after the
+provider request protects source provenance while acknowledging that OpenAI and
+PostgreSQL cannot commit atomically. Deterministic rendering into a second
+Artifact lets missing local files or rows be reconciled without another
+provider call.
+
+**Consequences**
+
+* Exactly one accepted `AIEnrichment` exists per Message in this version.
+* Exactly-once external provider execution is not claimed; concurrent manual
+  callers may consume more than one provider request before converging.
+* Prompt version 1 and schema version 1 are persisted and enforced on reuse.
+* Current model settings do not rewrite accepted provenance or output.
+* Enriched Markdown is a separate processed Artifact and is not Git-published
+  automatically.
+* No ProcessingTask, worker, Telegram command, regeneration, replacement,
+  provider routing, Anthropic integration, embeddings, or RAG is added.
+
+**Status:** accepted
+
+**Related task:** Task 013
+
+---
+
 # Possible future ADR split
 
 If this file becomes too large, the following decisions are good candidates for individual ADR files:

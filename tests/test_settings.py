@@ -30,6 +30,16 @@ def test_git_publication_enabled_parses_environment_value(
     assert settings.git_publication_enabled is True
 
 
+def test_openai_configuration_is_optional_and_blank_allowed(monkeypatch) -> None:
+    monkeypatch.setenv("OPENAI_API_KEY", "")
+    monkeypatch.setenv("OPENAI_MODEL", "")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.openai_api_key == ""
+    assert settings.openai_model == ""
+
+
 def test_compose_forwards_git_publication_setting_to_app_and_worker() -> None:
     compose = yaml.safe_load(Path("docker-compose.yml").read_text())
 
@@ -37,3 +47,16 @@ def test_compose_forwards_git_publication_setting_to_app_and_worker() -> None:
         assert compose["services"][service_name]["environment"][
             "GIT_PUBLICATION_ENABLED"
         ] == "${GIT_PUBLICATION_ENABLED:-false}"
+
+
+def test_compose_forwards_openai_configuration_to_app_only() -> None:
+    compose = yaml.safe_load(Path("docker-compose.yml").read_text())
+
+    assert compose["services"]["app"]["environment"]["OPENAI_API_KEY"] == (
+        "${OPENAI_API_KEY:-}"
+    )
+    assert compose["services"]["app"]["environment"]["OPENAI_MODEL"] == (
+        "${OPENAI_MODEL:-}"
+    )
+    assert "OPENAI_API_KEY" not in compose["services"]["worker"]["environment"]
+    assert "OPENAI_MODEL" not in compose["services"]["worker"]["environment"]

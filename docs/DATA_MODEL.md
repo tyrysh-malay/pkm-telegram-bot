@@ -2,7 +2,8 @@
 
 PostgreSQL stores operational state. Markdown files under the configured
 knowledge-base root are the human-readable artifacts. A nullable Artifact field
-records one validated local publication commit; remote Git state is postponed.
+records one validated local publication commit; an immutable AIEnrichment row
+records one accepted structured interpretation. Remote Git state is postponed.
 Alembic migrations, not runtime `create_all()`, own the schema.
 
 ## User
@@ -71,10 +72,19 @@ UNIQUE(message_id, artifact_type)
 UNIQUE(file_path)
 ```
 
-Task 006 processing supports only `artifact_type = "note"`; the database uses
-text rather than an enum or type check. `file_path` is a POSIX path relative to
-`KNOWLEDGE_BASE_PATH`. Title and slug are deterministic metadata but do not
-identify the file. The message relation has no artifact cascade-delete policy.
+Current artifact types are:
+
+```text
+note
+enriched_note
+```
+
+Task 006 processing creates and validates only `artifact_type = "note"`.
+Manual AI enrichment creates and validates `artifact_type = "enriched_note"`.
+The database uses text rather than an enum or type check. `file_path` is a
+POSIX path relative to `KNOWLEDGE_BASE_PATH`. Title and slug are deterministic
+metadata but do not identify the file. The message relation has no artifact
+cascade-delete policy.
 
 `git_commit_sha = NULL` means no publication commit has been successfully
 recorded in PostgreSQL. A non-null value is a canonical full hexadecimal object
@@ -153,10 +163,63 @@ Finalization is conditional on task ID, running status, and claimed attempt.
 `received` or `done` in current application behavior and is still unrestricted
 text at database level.
 
+## AIEnrichment
+
+`ai_enrichments` represents one immutable accepted structured AI result for a
+completed text Message:
+
+```text
+id                     UUID primary key
+message_id             UUID foreign key to messages, not null
+source_artifact_id     UUID foreign key to artifacts, not null
+source_content_sha256  TEXT not null
+provider               TEXT not null
+model                  TEXT not null
+prompt_version         INTEGER not null
+schema_version         INTEGER not null
+provider_response_id   TEXT nullable
+result_json             JSONB not null
+created_at              TIMESTAMPTZ not null
+```
+
+Constraint:
+
+```text
+UNIQUE(message_id)
+```
+
+The row is accepted data, not a task or attempt log. There is no status,
+updated timestamp, error, retry count, prompt table, request payload, raw
+provider response, usage/cost field, Git SHA, or enriched Artifact foreign key.
+Application code never updates an accepted row.
+
+`source_artifact_id` points to the raw `note` Artifact used as input and must
+belong to the same Message. `source_content_sha256` is the SHA-256 of the exact
+canonical provider input, not the raw Markdown bytes. `provider` is currently
+`openai`; `model` and `provider_response_id` are provenance from the accepted
+provider response and are not rewritten when current settings change.
+
+`prompt_version = 1` and `schema_version = 1` identify the repository-owned
+prompt and strict Pydantic result schema. `result_json` is PostgreSQL JSONB and
+contains only the normalized structure:
+
+```text
+title
+summary
+key_points
+tags
+action_items
+```
+
+Every reuse revalidates `result_json`, source provenance, provider metadata,
+and supported versions before rendering. The enriched Artifact is resolved
+indirectly by `message_id + artifact_type = "enriched_note"`.
+
 ## Postponed entities
 
-`processing_events`, artifact history, branch/remote state, and publication
-attempt models are not implemented.
+`processing_events`, artifact history, AI request history, AI retry/attempt
+models, provider routing, branch/remote state, and publication attempt models
+are not implemented.
 
 ## Source ownership
 
@@ -164,4 +227,5 @@ attempt models are not implemented.
 operational state        PostgreSQL
 human-readable artifact Markdown file
 repository history       local Git (manual or durable automatic publication)
+AI accepted result       PostgreSQL JSONB
 ```
