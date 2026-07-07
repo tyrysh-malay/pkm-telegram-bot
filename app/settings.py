@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     telegram_bot_token: str | None = None
     telegram_allowed_user_ids: frozenset[TelegramUserId] = frozenset()
     openai_api_key: str | None = None
+    openai_model: str | None = None
     database_url: str | None = None
     test_database_url: str | None = None
     redis_url: str = "redis://redis:6379/0"

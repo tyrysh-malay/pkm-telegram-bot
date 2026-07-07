@@ -38,6 +38,24 @@ FastAPI + aiogram app
                            local commit + Artifact SHA
 ```
 
+Manual structured AI enrichment is separate from the automatic worker flow:
+
+```text
+completed text Message + exact raw note Artifact/file
+        |
+        v
+canonical source-text snapshot
+        |
+        v
+OpenAI structured-output request outside PostgreSQL transaction
+        |
+        v
+immutable AIEnrichment row
+        |
+        v
+deterministic processed/ enriched_note Artifact + Markdown
+```
+
 PostgreSQL is the durable orchestration authority. Redis carries actor
 messages only; it stores no result or authoritative task state. Delivery is at
 least once, and duplicate delivery is expected.
@@ -68,6 +86,37 @@ deterministic reconciliation: an exact file without a row is retained and can
 be attached to a new row on the next explicit invocation; a valid row with a
 missing file can recreate it. Conflicting files and inconsistent rows fail
 without replacement or silent repair.
+
+## Manual AI-enrichment boundary
+
+Task 013 adds one manual boundary for completed text Messages whose raw note
+Artifact and file are still exact. The raw note remains the authoritative
+faithful capture under `inbox/`; enrichment creates a separate
+`artifact_type = "enriched_note"` file under `processed/`.
+
+The reusable enrichment function first validates the Message, raw Artifact
+metadata, raw file bytes, canonical source text, and source digest before any
+provider call. If no accepted enrichment exists, it closes that read
+transaction, calls the provider through a narrow provider-neutral protocol, and
+then opens a new transaction to lock and revalidate the source before accepting
+one immutable `AIEnrichment` row. PostgreSQL and OpenAI do not share a
+transaction, and concurrent callers may issue more than one external request;
+the Message uniqueness constraint and post-provider lock allow only one
+accepted row.
+
+Local materialization is a second phase. It revalidates the accepted row and
+current raw source, renders deterministic enriched Markdown from persisted
+data, and reconciles one processed Artifact/file through the existing
+no-replace filesystem primitives. Phase 2 never calls the provider. Missing
+local Artifact/file state can be repaired from the accepted `AIEnrichment`;
+conflicting files, inconsistent metadata, unsupported stored versions, or
+source digest changes fail closed.
+
+The only provider implementation is OpenAI Responses structured parsing with
+`store=false`, disabled SDK retries, and a bounded timeout. The app and worker
+can still start without OpenAI configuration. No ProcessingTask, dispatcher,
+worker, Telegram command, Git-publication path, or remote Git behavior invokes
+AI enrichment automatically.
 
 ## Local Git-publication boundary
 
@@ -133,6 +182,7 @@ locking prevent stale dispatchers and workers from overwriting newer state.
 ```text
 knowledge-base/
   inbox/
+  processed/
 ```
 
 Compose bind-mounts this directory from the host. File publication uses a fully
@@ -170,7 +220,8 @@ same deterministic Artifact and file.
 
 Not implemented:
 
-* AI generation;
+* automatic AI generation or orchestration;
+* enriched Artifact Git publication;
 * voice, image, link, file, or PDF processing;
 * remote Git synchronization;
 * LangChain, LangGraph, vector databases, RAG, microservices, or Kubernetes.

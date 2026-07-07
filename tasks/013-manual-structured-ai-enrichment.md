@@ -1,6 +1,6 @@
 # Task 013: Add a manual structured AI enrichment boundary for text messages
 
-**Status:** planned
+**Status:** ready for review
 **Depends on:** Tasks 000–012 and completion of the standalone Task 012 status correction
 **Target file:** `tasks/013-manual-structured-ai-enrichment.md`
 **Expected branch:** `task/013-manual-structured-ai-enrichment`

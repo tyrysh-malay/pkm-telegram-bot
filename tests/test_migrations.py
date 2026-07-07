@@ -5,6 +5,7 @@ from alembic import command
 from alembic.config import Config
 from sqlalchemy import text
 
+from app.db.models import AIEnrichment
 from app.db.models import Artifact
 from app.db.models import Message
 from app.db.models import ProcessingTask
@@ -264,6 +265,124 @@ def test_git_commit_sha_migration_downgrade_and_reupgrade_preserves_state() -> N
 
         asyncio.run(dispose_engine())
         assert asyncio.run(sha_value()) is None
+    finally:
+        asyncio.run(dispose_engine())
+        command.upgrade(config, "head")
+        asyncio.run(dispose_engine())
+
+
+def test_ai_enrichment_migration_downgrade_and_reupgrade_preserves_other_state() -> None:
+    user_id = uuid.uuid4()
+    message_id = uuid.uuid4()
+    artifact_id = uuid.uuid4()
+    task_id = uuid.uuid4()
+
+    async def seed() -> None:
+        session_factory = get_session_factory()
+        async with session_factory() as session:
+            session.add(
+                User(
+                    id=user_id,
+                    telegram_user_id=uuid.uuid4().int
+                    % 9_000_000_000_000_000_000,
+                )
+            )
+            session.add(
+                Message(
+                    id=message_id,
+                    user_id=user_id,
+                    telegram_chat_id=4,
+                    telegram_message_id=4,
+                    input_type="text",
+                    raw_text="ai migration source",
+                    status="done",
+                    idempotency_key=f"migration:{message_id}",
+                )
+            )
+            session.add(
+                Artifact(
+                    id=artifact_id,
+                    message_id=message_id,
+                    artifact_type="note",
+                    title="AI migration",
+                    slug="ai-migration",
+                    file_path=f"inbox/{message_id}.md",
+                )
+            )
+            session.add(
+                ProcessingTask(
+                    id=task_id,
+                    message_id=message_id,
+                    status="succeeded",
+                )
+            )
+            await session.flush()
+            session.add(
+                AIEnrichment(
+                    message_id=message_id,
+                    source_artifact_id=artifact_id,
+                    source_content_sha256="a" * 64,
+                    provider="openai",
+                    model="gpt-test",
+                    prompt_version=1,
+                    schema_version=1,
+                    result_json={
+                        "title": "Title",
+                        "summary": "Summary",
+                        "key_points": [],
+                        "tags": [],
+                        "action_items": [],
+                    },
+                )
+            )
+            await session.commit()
+
+    async def state() -> tuple[str | None, int, int, int, int, str]:
+        async with get_engine().connect() as connection:
+            ai_table = await connection.scalar(
+                text("SELECT to_regclass('public.ai_enrichments')::text")
+            )
+            counts = []
+            for table, identifier in (
+                ("users", user_id),
+                ("messages", message_id),
+                ("artifacts", artifact_id),
+                ("processing_tasks", task_id),
+            ):
+                counts.append(
+                    await connection.scalar(
+                        text(f"SELECT count(*) FROM {table} WHERE id = :id"),
+                        {"id": identifier},
+                    )
+                )
+            status = await connection.scalar(
+                text("SELECT status FROM messages WHERE id = :id"),
+                {"id": message_id},
+            )
+        return ai_table, *counts, status
+
+    asyncio.run(seed())
+    asyncio.run(dispose_engine())
+    config = Config("alembic.ini")
+
+    try:
+        assert asyncio.run(state()) == ("ai_enrichments", 1, 1, 1, 1, "done")
+        command.downgrade(config, "0004")
+        asyncio.run(dispose_engine())
+        assert asyncio.run(state()) == (None, 1, 1, 1, 1, "done")
+
+        command.upgrade(config, "0005")
+        asyncio.run(dispose_engine())
+        assert asyncio.run(state()) == ("ai_enrichments", 1, 1, 1, 1, "done")
+
+        async def ai_count() -> int:
+            async with get_engine().connect() as connection:
+                return await connection.scalar(
+                    text("SELECT count(*) FROM ai_enrichments")
+                )
+
+        asyncio.run(dispose_engine())
+        assert asyncio.run(ai_count()) == 0
     finally:
         asyncio.run(dispose_engine())
         command.upgrade(config, "head")

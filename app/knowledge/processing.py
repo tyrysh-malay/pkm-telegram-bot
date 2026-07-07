@@ -91,6 +91,39 @@ def _validate_artifact(
         )
 
 
+def validate_raw_note_artifact(
+    *,
+    message: Message,
+    artifact: Artifact,
+    message_id: uuid.UUID,
+    knowledge_base_root: Path,
+) -> tuple[RenderedNote, bytes]:
+    expected = _validate_source_message(message, message_id)
+    _validate_artifact(artifact, message_id, expected)
+
+    _, destination = resolve_destination(
+        knowledge_base_root,
+        artifact.file_path,
+        create_missing=False,
+    )
+    state = classify_file(destination, expected.content)
+    if state is FileState.ABSENT:
+        raise KnowledgeBaseInvariantError(
+            f"artifact file is absent at {artifact.file_path}"
+        )
+    if state is FileState.CONFLICTING:
+        raise FileConflictError(
+            f"conflicting file exists at artifact path {artifact.file_path}"
+        )
+    if state is FileState.UNSUPPORTED:
+        raise UnsupportedFileEntryError(
+            "unsupported filesystem entry exists at artifact path "
+            f"{artifact.file_path}"
+        )
+
+    return expected, expected.content
+
+
 async def validate_existing_artifact(
     session: AsyncSession,
     artifact_id: uuid.UUID,
@@ -113,30 +146,14 @@ async def validate_existing_artifact(
             f"artifact {artifact_id} source message {artifact.message_id} was not found"
         )
 
-    expected = _validate_source_message(message, message.id)
-    _validate_artifact(artifact, message.id, expected)
-
-    _, destination = resolve_destination(
-        knowledge_base_root,
-        artifact.file_path,
-        create_missing=False,
+    _, content = validate_raw_note_artifact(
+        message=message,
+        artifact=artifact,
+        message_id=message.id,
+        knowledge_base_root=knowledge_base_root,
     )
-    state = classify_file(destination, expected.content)
-    if state is FileState.ABSENT:
-        raise KnowledgeBaseInvariantError(
-            f"artifact file is absent at {artifact.file_path}"
-        )
-    if state is FileState.CONFLICTING:
-        raise FileConflictError(
-            f"conflicting file exists at artifact path {artifact.file_path}"
-        )
-    if state is FileState.UNSUPPORTED:
-        raise UnsupportedFileEntryError(
-            "unsupported filesystem entry exists at artifact path "
-            f"{artifact.file_path}"
-        )
 
-    return artifact, expected.content
+    return artifact, content
 
 
 async def _process_attempt(

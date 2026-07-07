@@ -10,6 +10,7 @@ from sqlalchemy import Integer
 from sqlalchemy import Text
 from sqlalchemy import UniqueConstraint
 from sqlalchemy import func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped
 from sqlalchemy.orm import mapped_column
 from sqlalchemy.orm import relationship
@@ -88,6 +89,9 @@ class Message(Base):
     user: Mapped[User] = relationship(back_populates="messages")
     artifacts: Mapped[list["Artifact"]] = relationship(back_populates="message")
     processing_tasks: Mapped[list["ProcessingTask"]] = relationship(
+        back_populates="message"
+    )
+    ai_enrichment: Mapped["AIEnrichment | None"] = relationship(
         back_populates="message"
     )
 
@@ -191,3 +195,41 @@ class ProcessingTask(Base):
     )
 
     message: Mapped[Message] = relationship(back_populates="processing_tasks")
+
+
+class AIEnrichment(Base):
+    __tablename__ = "ai_enrichments"
+    __table_args__ = (
+        UniqueConstraint("message_id", name="uq_ai_enrichments_message_id"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        primary_key=True,
+        default=uuid.uuid4,
+    )
+    message_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("messages.id"),
+        nullable=False,
+    )
+    source_artifact_id: Mapped[uuid.UUID] = mapped_column(
+        Uuid(as_uuid=True),
+        ForeignKey("artifacts.id"),
+        nullable=False,
+    )
+    source_content_sha256: Mapped[str] = mapped_column(Text, nullable=False)
+    provider: Mapped[str] = mapped_column(Text, nullable=False)
+    model: Mapped[str] = mapped_column(Text, nullable=False)
+    prompt_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    schema_version: Mapped[int] = mapped_column(Integer, nullable=False)
+    provider_response_id: Mapped[str | None] = mapped_column(Text)
+    result_json: Mapped[dict[str, object]] = mapped_column(JSONB, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    message: Mapped[Message] = relationship(back_populates="ai_enrichment")
+    source_artifact: Mapped[Artifact] = relationship()
